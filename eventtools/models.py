@@ -8,7 +8,9 @@ from django.db import models
 from django.db.models import Q, Case, When, Value
 from django.core.exceptions import ValidationError
 
-from django.utils.timezone import make_aware, is_naive, make_naive, is_aware
+#from django.utils.timezone import make_aware, is_naive, make_naive, is_aware
+from django.utils import timezone
+
 from django.utils.translation import gettext_lazy as _
 
 from six import python_2_unicode_compatible
@@ -35,25 +37,38 @@ def first_item(gen):
         return None
 
 
+# def default_aware(dt):
+#     """Convert a naive datetime argument to a tz-aware datetime, if tz support
+#        is enabled. """
+
+#     if settings.USE_TZ and is_naive(dt):
+#         return make_aware(dt)
+
+#     # if timezone support disabled, assume only naive datetimes are used
+#     return dt
 def default_aware(dt):
     """Convert a naive datetime argument to a tz-aware datetime, if tz support
        is enabled. """
-
-    if settings.USE_TZ and is_naive(dt):
-        return make_aware(dt)
-
-    # if timezone support disabled, assume only naive datetimes are used
+    if settings.USE_TZ and timezone.is_naive(dt):
+        # Use the current (or default) Django timezone, which is ZoneInfo in modern Django
+        return timezone.make_aware(dt, timezone.get_current_timezone())
     return dt
 
+# def default_naive(dt):
+#     """Convert an aware datetime argument to naive, if tz support
+#        is enabled. """
 
+#     if settings.USE_TZ and is_aware(dt):
+#         return make_naive(dt)
+
+#     # if timezone support disabled, assume only naive datetimes are used
+#     return dt
 def default_naive(dt):
     """Convert an aware datetime argument to naive, if tz support
        is enabled. """
-
-    if settings.USE_TZ and is_aware(dt):
-        return make_naive(dt)
-
-    # if timezone support disabled, assume only naive datetimes are used
+    if settings.USE_TZ and timezone.is_aware(dt):
+        # Explicit tz avoids pytz/zoneinfo weirdness and Django version differences
+        return timezone.make_naive(dt, timezone.get_current_timezone())
     return dt
 
 

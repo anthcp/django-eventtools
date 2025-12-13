@@ -2,10 +2,10 @@ from datetime import datetime, date, timedelta
 from dateutil import rrule
 from dateutil.relativedelta import relativedelta
 
-import pytz
-from django.utils import timezone
+#import pytz
 from django.test import TestCase, override_settings
-from django.utils.timezone import get_default_timezone, make_aware
+#from django.utils.timezone import get_default_timezone, make_aware
+from django.utils import timezone
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from eventtools.models import REPEAT_MAX
@@ -112,10 +112,10 @@ class EventToolsTestCase(TestCase):
 
         # using tz-aware datetime() arguments, if appropriate
         if settings.USE_TZ:
-            tz = get_default_timezone()
+            tz = timezone.get_default_timezone()
             dates = list(occ.all_occurrences(
-                from_date=datetime(2015, 12, 25, 6, 0, 0, 0, tz),
-                to_date=datetime(2015, 12, 25, 23, 0, 0, 0, tz), ))
+                from_date=datetime(2015, 12, 25, 6, 0, 0, 0, tzinfo=tz),
+                to_date=datetime(2015, 12, 25, 23, 0, 0, 0, tzinfo=tz), ))
             self.assertEqual(len(dates), 1)
 
         # date range intersecting with occurrence time
@@ -159,8 +159,11 @@ class EventToolsTestCase(TestCase):
 
         occ = self.future.get_related_occurrences().get() \
                   .next_occurrence(from_date=self.today)
-        self.assertEqual(occ[0].timetuple()[:5],
-                         datetime(2016, 1, 1, 7, 0).timetuple()[:5])
+        expected = timezone.make_aware(datetime(2016, 1, 1, 7, 0), timezone.get_current_timezone())
+        self.assertEqual(
+        timezone.localtime(occ[0], timezone.get_current_timezone()).timetuple()[:5],
+            expected.timetuple()[:5]
+        )
 
         # and for repeating
         occ = self.daily.get_related_occurrences().get() \
@@ -445,25 +448,25 @@ class EventToolsTestCase(TestCase):
         # Check that event start times are consistent across daylight saving
         # changes - on an EST5EDT system, daylight saving ends on 5/11/2016
         event = MyEvent.objects.create(title='Test')
-        start = make_aware(datetime(2016, 11, 5, 10, 0))
+        start = timezone.make_aware(datetime(2016, 11, 5, 10, 0))
         MyOccurrence.objects.create(event=event, start=start,
                                   repeat="RRULE:FREQ=WEEKLY")
 
         occs = list(event.all_occurrences(from_date=start, limit=2))
         self.assertEqual(occs[0][0], start)
-        self.assertEqual(occs[1][0], make_aware(datetime(2016, 11, 12, 10, 0)))
+        self.assertEqual(occs[1][0], timezone.make_aware(datetime(2016, 11, 12, 10, 0)))
 
     @override_settings(USE_TZ=True, TIME_ZONE='Pacific/Auckland')
     def test_dst_boundary_nz(self):
         # NZ DST commences on 25/9/2016
         event = MyEvent.objects.create(title='Test')
-        start = make_aware(datetime(2016, 9, 20, 10, 0))
+        start = timezone.make_aware(datetime(2016, 9, 20, 10, 0))
         MyOccurrence.objects.create(event=event, start=start,
                                   repeat="RRULE:FREQ=WEEKLY")
 
         occs = list(event.all_occurrences(from_date=start.date(), limit=2))
         self.assertEqual(occs[0][0], start)
-        self.assertEqual(occs[1][0], make_aware(datetime(2016, 9, 27, 10, 0)))
+        self.assertEqual(occs[1][0], timezone.make_aware(datetime(2016, 9, 27, 10, 0)))
 
     def test_sort_by_next(self):
         qs = MyEvent.objects.filter(pk__in=[self.christmas.pk, self.weekends.pk])
@@ -479,17 +482,15 @@ class EventToolsTestCase(TestCase):
     def test_sg_timezone(self):
         sg_tz = timezone.get_current_timezone()
         occ = MyOccurrence(
-            start=sg_tz.localize(datetime(2017, 12, 24, 1)),
-            repeat='FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1')
+            start=timezone.make_aware(datetime(2017, 12, 24, 1), sg_tz),
+            repeat='RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1'
+        )
 
         next_occ = occ.next_occurrence(
-            from_date=datetime(2017, 12, 26, 22, 49, tzinfo=pytz.utc))
-        self.assertEqual(
-            next_occ[0].timetuple()[:5],
-            (2017, 12, 28, 1, 0))
+            from_date=datetime(2017, 12, 26, 22, 49, tzinfo=timezone.UTC))
+        self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 28, 1, 0))
 
         next_occ = occ.next_occurrence(
-            from_date=datetime(2017, 12, 26, 12, 49, tzinfo=pytz.utc))
-        self.assertEqual(
-            next_occ[0].timetuple()[:5],
-            (2017, 12, 27, 1, 0))
+            from_date=datetime(2017, 12, 26, 12, 49, tzinfo=timezone.UTC))
+        self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 27, 1, 0))
+

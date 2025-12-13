@@ -1,0 +1,15 @@
+LICENSE.txt
+MANIFEST.in
+README.md
+setup.py
+django_eventtools.egg-info/PKG-INFO
+django_eventtools.egg-info/SOURCES.txt
+django_eventtools.egg-info/dependency_links.txt
+django_eventtools.egg-info/not-zip-safe
+django_eventtools.egg-info/requires.txt
+django_eventtools.egg-info/top_level.txt
+eventtools/__init__.py
+eventtools/_version.py
+eventtools/models.py
+tests/test_settings.py
+tests/tests.py
