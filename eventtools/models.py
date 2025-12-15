@@ -10,9 +10,10 @@ from django.core.exceptions import ValidationError
 
 #from django.utils.timezone import make_aware, is_naive, make_naive, is_aware
 from django.utils import timezone
-
+from django.utils.timezone import make_aware, is_naive, is_aware
+from timezone_field import TimeZoneField  
 from django.utils.translation import gettext_lazy as _
-
+from zoneinfo import ZoneInfo
 from six import python_2_unicode_compatible
 
 
@@ -22,9 +23,11 @@ REPEAT_CHOICES = getattr(settings, 'EVENTTOOLS_REPEAT_CHOICES', (
     ("RRULE:FREQ=WEEKLY", 'Weekly'),
     ("RRULE:FREQ=MONTHLY", 'Monthly'),
     ("RRULE:FREQ=YEARLY", 'Yearly'),
+    ("RRULE:FREQ=MONTHLY;BYDAY=SU;BYSETPOS=-1", "Last Sunday of the month"),
 ))
 REPEAT_MAX = 200
 
+utc_tz = ZoneInfo('UTC')
 
 def max_future_date():
     return datetime(date.today().year + 10, 1, 1, 0, 0)
@@ -37,15 +40,6 @@ def first_item(gen):
         return None
 
 
-# def default_aware(dt):
-#     """Convert a naive datetime argument to a tz-aware datetime, if tz support
-#        is enabled. """
-
-#     if settings.USE_TZ and is_naive(dt):
-#         return make_aware(dt)
-
-#     # if timezone support disabled, assume only naive datetimes are used
-#     return dt
 def default_aware(dt):
     """Convert a naive datetime argument to a tz-aware datetime, if tz support
        is enabled. """
@@ -57,19 +51,10 @@ def default_aware(dt):
 # def default_naive(dt):
 #     """Convert an aware datetime argument to naive, if tz support
 #        is enabled. """
-
-#     if settings.USE_TZ and is_aware(dt):
-#         return make_naive(dt)
-
-#     # if timezone support disabled, assume only naive datetimes are used
+#     if settings.USE_TZ and timezone.is_aware(dt):
+#         # Explicit tz avoids pytz/zoneinfo weirdness and Django version differences
+#         return timezone.make_naive(dt, timezone.get_current_timezone())
 #     return dt
-def default_naive(dt):
-    """Convert an aware datetime argument to naive, if tz support
-       is enabled. """
-    if settings.USE_TZ and timezone.is_aware(dt):
-        # Explicit tz avoids pytz/zoneinfo weirdness and Django version differences
-        return timezone.make_naive(dt, timezone.get_current_timezone())
-    return dt
 
 
 def as_datetime(d, end=False):
@@ -368,8 +353,12 @@ class BaseOccurrence(BaseModel):
         verbose_name=_('repeat'))
     repeat_until = models.DateField(
         null=True, blank=True, verbose_name=_('repeat_until'))
+    
+    # New field: per-occurrence timezone (ZoneInfo object)
+    event_timezone = TimeZoneField(default=settings.TIME_ZONE)
 
     def clean(self):
+        # Existing validation
         if self.start and self.end and self.start >= self.end:
             msg = u"End must be after start"
             raise ValidationError(msg)
@@ -384,6 +373,12 @@ class BaseOccurrence(BaseModel):
             msg = u"'Repeat until' cannot be before the first occurrence"
             raise ValidationError(msg)
 
+        # New: Make start/end aware UTC, assuming inputs naive in event_timezone
+        local_tz = self.event_timezone  # ZoneInfo object
+        self.start = default_aware(self.start, local_tz).astimezone(utc_tz)
+        if self.end:
+            self.end = default_aware(self.end, local_tz).astimezone(utc_tz)
+
     objects = OccurrenceManager()
 
     def all_occurrences(self, from_date=None, to_date=None, limit=REPEAT_MAX):
@@ -393,58 +388,69 @@ class BaseOccurrence(BaseModel):
         if not self.start:
             return
 
-        from_date = from_date and as_datetime(from_date)
-        to_date = to_date and as_datetime(to_date, True)
+        from_date = from_date and default_aware(from_date, utc_tz)
+        to_date = to_date and default_aware(to_date, utc_tz)
 
         if not self.repeat:
             if (not from_date or self.start >= from_date or
                 (self.end and self.end >= from_date)) and \
                (not to_date or self.start <= to_date):
                 yield (self.start, self.end, self.occurrence_data)
-        else:
-            delta = (self.end - self.start) if self.end else timedelta(0)
-            repeater = self.get_repeater()
+            return
 
-            # start from the first occurrence at the earliest
-            if not from_date or from_date < self.start:
-                from_date = self.start
+        delta = (self.end - self.start) if self.end else timedelta(0)
+        repeater = self.get_repeater()
 
-            # look until the last occurrence, up to an arbitrary maximum date
-            if self.repeat_until and (
-                    not to_date or
-                    as_datetime(self.repeat_until, True) < to_date):
-                to_date = as_datetime(self.repeat_until, True)
-            elif not to_date:
-                to_date = default_aware(max_future_date())
+        # start from the first occurrence at the earliest
+        if not from_date or from_date < self.start:
+            from_date = self.start
 
-            # start is used for the filter, so modify from_date to take the
-            # occurrence length into account
-            from_date -= delta
+        # look until the last occurrence, up to an arbitrary maximum date
+        if self.repeat_until and (
+                not to_date or
+                default_aware(datetime.combine(self.repeat_until, datetime.max.time()), utc_tz) < to_date):
+            to_date = default_aware(datetime.combine(self.repeat_until, datetime.max.time()), utc_tz)
+        elif not to_date:
+            to_date = default_aware(datetime.max, utc_tz)  # Arbitrary far future
 
-            # always send naive datetimes to the repeater
-            repeater = repeater.between(default_naive(from_date),
-                                        default_naive(to_date), inc=True)
+        # start is used for the filter, so modify from_date to take the
+        # occurrence length into account
+        from_date -= delta
 
-            count = 0
-            for occ_start in repeater:
-                count += 1
-                if count > limit:
-                    return
+        # Use aware datetimes directly (no default_naive)
+        repeater_iter = repeater.between(from_date, to_date, inc=True)
 
-                # make naive results aware
-                occ_start = default_aware(occ_start)
-                yield (occ_start, occ_start + delta, self.occurrence_data)
+        count = 0
+        for occ_start in repeater_iter:
+            count += 1
+            if count > limit:
+                return
+
+            occ_end = occ_start + delta if self.end else None
+            yield (occ_start, occ_end, self.occurrence_data)
 
     def get_repeater(self):
         """Get rruleset instance representing this occurrence's repetitions.
-
         Subclasses may override this method for custom repeat behaviour.
         """
+        if not self.repeat:
+            return None
+
+        # Use aware dtstart (stored as UTC)
+        dtstart = self.start  # aware UTC
 
         ruleset = rrule.rruleset()
-        rule = rrule.rrulestr(self.repeat, dtstart=default_naive(self.start))
+        rule = rrule.rrulestr(self.repeat, dtstart=dtstart)
         ruleset.rrule(rule)
         return ruleset
+
+    def localized_occurrences(self, from_date=None, to_date=None, limit=REPEAT_MAX):
+        """Yield localized (start, end, data) in the event_timezone."""
+        local_tz = self.event_timezone
+        for start, end, data in self.all_occurrences(from_date, to_date, limit):
+            local_start = start.astimezone(local_tz)
+            local_end = end.astimezone(local_tz) if end else None
+            yield (local_start, local_end, data)
 
     @property
     def occurrence_data(self):

@@ -494,3 +494,24 @@ class EventToolsTestCase(TestCase):
             from_date=datetime(2017, 12, 26, 12, 49, tzinfo=timezone.UTC))
         self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 27, 1, 0))
 
+    @override_settings(USE_TZ=True, TIME_ZONE='UTC')
+    def test_last_sunday_of_month(self):
+        event = MyEvent.objects.create(title='Last Sunday monthly')
+        MyOccurrence.objects.create(
+            event=event,
+            start=datetime(2016, 1, 1, 7, 0),
+            end=None,
+            repeat='RRULE:FREQ=MONTHLY;BYDAY=SU;BYSETPOS=-1',
+        )
+
+        occ = event.get_related_occurrences().get()
+        got = [x[0].date() for x in occ.all_occurrences(limit=4)]
+
+        # 2016: last Sundays Jan-Apr are 31, 28, 27, 24
+        self.assertEqual(got, [
+            date(2016, 1, 31),
+            date(2016, 2, 28),
+            date(2016, 3, 27),
+            date(2016, 4, 24),
+        ])
+
