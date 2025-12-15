@@ -106,7 +106,27 @@ def as_datetime(d, tz, end=False, *, allow_naive=False):
 
     return d.astimezone(tz)
 
+def as_datetime_qs(d, end=False):
+    """
+    For QuerySet filtering only.
 
+    Converts date/datetime to an aware datetime using Django's default timezone.
+    This is an approximation layer (events may have their own tz).
+    """
+    if d is None:
+        return None
+
+    if isinstance(d, date) and not isinstance(d, datetime):
+        if end:
+            dt = datetime(d.year, d.month, d.day, 23, 59, 59)
+        else:
+            dt = datetime(d.year, d.month, d.day, 0, 0, 0)
+        return timezone.make_aware(dt, timezone.get_default_timezone())
+
+    # datetime
+    if timezone.is_naive(d):
+        return timezone.make_aware(d, timezone.get_default_timezone())
+    return d
 
 def combine_occurrences(generators, limit):
     """Merge the occurrences in two or more generators, in date order.
@@ -165,7 +185,7 @@ def filter_from(qs, from_date, q_func=Q):
     """Filter a queryset by from_date. May still contain false positives due to
        uncertainty with repetitions. """
 
-    from_date = as_datetime(from_date)
+    from_date = as_datetime_qs(from_date)
     return qs.filter(
         q_func(end__isnull=False, end__gte=from_date) |
         q_func(start__gte=from_date) |
@@ -251,7 +271,7 @@ class EventQuerySet(BaseQuerySet):
 
         # to_date filtering is accurate
         if to_date:
-            to_date = as_datetime(to_date, True)
+            to_date = as_datetime_qs(to_date, True)
             filtered_qs = filtered_qs.filter(
                 wrap_q(start__lte=to_date)).distinct()
 
@@ -414,7 +434,7 @@ class OccurrenceQuerySet(BaseQuerySet):
 
         # to_date filtering is accurate
         if to_date:
-            to_date = as_datetime(to_date, True)
+            to_date = as_datetime_qs(to_date, True)
             filtered_qs = filtered_qs.filter(Q(start__lte=to_date)).distinct()
 
         if from_date:

@@ -104,91 +104,107 @@ class EventToolsTestCase(TestCase):
                 repeat_until=date(2015, 12, 31),
             ).clean()
 
-    # def test_single_occurrence(self):
-    #     occ = self.christmas.get_related_occurrences().get()
+    def test_single_occurrence(self):
+        occ = self.christmas.get_related_occurrences().get()
+        event_tz = ZoneInfo(self.christmas.tz)  # "UTC" from setUp()
 
-    #     # using date() arguments - convert to aware datetime
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime.combine(date(2015, 12, 1), datetime.min.time())),
-    #         to_date=timezone.make_aware(datetime.combine(date(2015, 12, 31), datetime.max.time())),))
-    #     self.assertEqual(len(dates), 1)
+        def aware(dt: datetime):
+            return timezone.make_aware(dt, event_tz)
 
-    #     # check it works as expected when from/to equal the occurrence date
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime.combine(date(2015, 12, 25), datetime.min.time())),
-    #         to_date=timezone.make_aware(datetime.combine(date(2015, 12, 25), datetime.max.time())), ))
-    #     self.assertEqual(len(dates), 1)
+        # using date() arguments -> convert to aware datetimes in event tz
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime.combine(date(2015, 12, 1), datetime.min.time())),
+            to_date=aware(datetime.combine(date(2015, 12, 31), datetime.max.time())),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # using datetime() arguments
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 25, 6, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 25, 23, 0, 0)), ))
-    #     self.assertEqual(len(dates), 1)
+        # from/to equal the occurrence date
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime.combine(date(2015, 12, 25), datetime.min.time())),
+            to_date=aware(datetime.combine(date(2015, 12, 25), datetime.max.time())),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # using tz-aware datetime() arguments, if appropriate
-    #     if settings.USE_TZ:
-    #         tz = timezone.get_default_timezone()
-    #         dates = list(occ.all_occurrences(
-    #             from_date=timezone.make_aware(datetime(2015, 12, 25, 6, 0, 0)),
-    #             to_date=timezone.make_aware(datetime(2015, 12, 25, 23, 0, 0)), ))
-    #         self.assertEqual(len(dates), 1)
+        # using datetime() arguments
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 25, 6, 0, 0)),
+            to_date=aware(datetime(2015, 12, 25, 23, 0, 0)),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # date range intersecting with occurrence time
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 25, 10, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 25, 23, 0, 0)), ))
-    #     self.assertEqual(len(dates), 1)
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 25, 6, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 25, 10, 0, 0)), ))
-    #     self.assertEqual(len(dates), 1)
+        # tz-aware datetimes (still event tz; no need for a separate branch now)
+        if settings.USE_TZ:
+            dates = list(occ.all_occurrences(
+                from_date=aware(datetime(2015, 12, 25, 6, 0, 0)),
+                to_date=aware(datetime(2015, 12, 25, 23, 0, 0)),
+            ))
+            self.assertEqual(len(dates), 1)
 
-    #     # date range within occurrence time
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 25, 12, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 25, 13, 0, 0)), ))
-    #     self.assertEqual(len(dates), 1)
+        # date range intersecting with occurrence time
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 25, 10, 0, 0)),
+            to_date=aware(datetime(2015, 12, 25, 23, 0, 0)),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # date range outside occurrence time
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 24, 12, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 26, 13, 0, 0)), ))
-    #     self.assertEqual(len(dates), 1)
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 25, 6, 0, 0)),
+            to_date=aware(datetime(2015, 12, 25, 10, 0, 0)),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # date range before occurrence time
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 24, 12, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 24, 13, 0, 0)), ))
-    #     self.assertEqual(len(dates), 0)
+        # date range within occurrence time
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 25, 12, 0, 0)),
+            to_date=aware(datetime(2015, 12, 25, 13, 0, 0)),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # date range after occurrence time
-    #     dates = list(occ.all_occurrences(
-    #         from_date=timezone.make_aware(datetime(2015, 12, 25, 23, 0, 0)),
-    #         to_date=timezone.make_aware(datetime(2015, 12, 25, 23, 30, 0)), ))
-    #     self.assertEqual(len(dates), 0)
+        # date range outside occurrence time
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 24, 12, 0, 0)),
+            to_date=aware(datetime(2015, 12, 26, 13, 0, 0)),
+        ))
+        self.assertEqual(len(dates), 1)
 
-    #     # check next_occurence method for non-repeating occurrences
-    #     occ = self.past.get_related_occurrences().get() \
-    #               .next_occurrence(from_date=timezone.make_aware(datetime.combine(self.today, datetime.min.time())))
-    #     self.assertEqual(occ, None)
+        # date range before occurrence time
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 24, 12, 0, 0)),
+            to_date=aware(datetime(2015, 12, 24, 13, 0, 0)),
+        ))
+        self.assertEqual(len(dates), 0)
 
-    #     tz = timezone.get_current_timezone()
-    #     occ = self.future.get_related_occurrences().get().next_occurrence(
-    #         from_date=timezone.make_aware(datetime.combine(self.today, datetime.min.time()), tz)
-    #     )
-    #     expected = timezone.make_aware(datetime(2016, 1, 1, 7, 0), tz)
-    #     self.assertEqual(timezone.localtime(occ[0], tz), expected)
+        # date range after occurrence time
+        dates = list(occ.all_occurrences(
+            from_date=aware(datetime(2015, 12, 25, 23, 0, 0)),
+            to_date=aware(datetime(2015, 12, 25, 23, 30, 0)),
+        ))
+        self.assertEqual(len(dates), 0)
 
+        # next_occurrence for non-repeating occurrences
+        occ_none = self.past.get_related_occurrences().get().next_occurrence(
+            from_date=aware(datetime.combine(self.today, datetime.min.time()))
+        )
+        self.assertEqual(occ_none, None)
 
-    #     # and for repeating
-    #     occ = self.daily.get_related_occurrences().get() \
-    #               .next_occurrence(from_date=timezone.make_aware(datetime.combine(self.today, datetime.min.time())))
-    #     self.assertEqual(occ[0].date(), self.today)
+        # future non-repeating
+        occ_future = self.future.get_related_occurrences().get().next_occurrence(
+            from_date=aware(datetime.combine(self.today, datetime.min.time()))
+        )
+        expected = timezone.make_aware(datetime(2016, 1, 1, 7, 0), ZoneInfo(self.future.tz))
+        self.assertEqual(occ_future[0].timetuple()[:5], expected.timetuple()[:5])
 
-    #     # test next_occurrence for querysets
-    #     occ = self.daily.get_related_occurrences().all() \
-    #               .next_occurrence(from_date=timezone.make_aware(datetime.combine(self.today, datetime.min.time())))
-    #     self.assertEqual(occ[0].date(), self.today)
+        # repeating (daily)
+        occ_daily = self.daily.get_related_occurrences().get().next_occurrence(
+            from_date=aware(datetime.combine(self.today, datetime.min.time()))
+        )
+        self.assertEqual(occ_daily[0].date(), self.today)
+
+        # repeating (daily) via queryset
+        occ_daily_qs = self.daily.get_related_occurrences().all().next_occurrence(
+            from_date=aware(datetime.combine(self.today, datetime.min.time()))
+        )
+        self.assertEqual(occ_daily_qs[0].date(), self.today)
 
     # @override_settings(USE_TZ=True)
     # def test_single_occurrence_tz(self):
