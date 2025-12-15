@@ -193,25 +193,43 @@ def filter_from(qs, from_date, q_func=Q):
          q_func(repeat_until__isnull=True)))).distinct()
 
 
+# class OccurrenceMixin(object):
+#     """Class mixin providing common occurrence-related functionality. """
+
+#     def all_occurrences(self, from_date=None, to_date=None):
+#         raise NotImplementedError()
+
+#     def next_occurrence(self, from_date=None, to_date=None):
+#         """Return next occurrence as a (start, end) tuple for this instance,
+#            between from_date and to_date, taking repetition into account. """
+#         if not from_date:
+#             from_date = datetime.now()
+#         return first_item(
+#             self.all_occurrences(from_date=from_date, to_date=to_date))
+
+#     def first_occurrence(self):
+#         """Return first occurrence as a (start, end) tuple for this instance.
+#         """
+#         return first_item(self.all_occurrences())
+
 class OccurrenceMixin(object):
-    """Class mixin providing common occurrence-related functionality. """
+    """Class mixin providing common occurrence-related functionality."""
 
     def all_occurrences(self, from_date=None, to_date=None):
         raise NotImplementedError()
 
     def next_occurrence(self, from_date=None, to_date=None):
-        """Return next occurrence as a (start, end) tuple for this instance,
-           between from_date and to_date, taking repetition into account. """
-        if not from_date:
-            from_date = datetime.now()
-        return first_item(
-            self.all_occurrences(from_date=from_date, to_date=to_date))
+        """Return next occurrence as a (start, end, data) tuple for this instance,
+        between from_date and to_date, taking repetition into account."""
+        
+        if from_date is None:
+            from_date = timezone.now()  # aware when USE_TZ=True
+        return first_item(self.all_occurrences(from_date=from_date, to_date=to_date))
 
     def first_occurrence(self):
-        """Return first occurrence as a (start, end) tuple for this instance.
-        """
+        """Return first occurrence as a (start, end, data) tuple for this instance."""
         return first_item(self.all_occurrences())
-
+        
 
 class BaseQuerySet(models.QuerySet, OccurrenceMixin):
     """Base QuerySet for models which have occurrences. """

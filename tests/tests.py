@@ -206,174 +206,207 @@ class EventToolsTestCase(TestCase):
         )
         self.assertEqual(occ_daily_qs[0].date(), self.today)
 
-    # @override_settings(USE_TZ=True)
-    # def test_single_occurrence_tz(self):
-    #     self.test_single_occurrence()
 
-    # def test_occurrence_qs(self):
-    #     events = [self.christmas, self.past, self.future]
-    #     occs = MyOccurrence.objects.filter(event__in=events)
+    def test_single_occurrence_tz(self):
+        self.test_single_occurrence()
 
-    #     # two christmases and the future event
-    #     dates = list(occs.all_occurrences(
-    #         from_date=timezone.make_aware(datetime.combine(date(2015, 1, 1), datetime.min.time())),
-    #         to_date=timezone.make_aware(datetime.combine(date(2016, 12, 31), datetime.max.time())),))
-    #     self.assertEqual(len(dates), 3)
+    def test_occurrence_qs(self):
+        events = [self.christmas, self.past, self.future]
+        occs = MyOccurrence.objects.filter(event__in=events)
 
-    #     # one christmas and the past event
-    #     dates = list(occs.all_occurrences(
-    #         from_date=timezone.make_aware(datetime.combine(date(2014, 1, 1), datetime.min.time())),
-    #         to_date=timezone.make_aware(datetime.combine(date(2014, 12, 31), datetime.max.time())),))
-    #     self.assertEqual(len(dates), 2)
+        tz = ZoneInfo(self.christmas.tz)  # "UTC" from setUp()
 
-    #     # test queryset filtering
-    #     qs = occs.for_period(from_date=timezone.make_aware(datetime.combine(date(2015, 1, 1), datetime.min.time())), exact=True)
-    #     self.assertEqual(qs.count(), 2)
+        def aware(dt: datetime):
+            return timezone.make_aware(dt, tz)
 
-    #     qs = occs.for_period(to_date=timezone.make_aware(datetime.combine(date(2010, 1, 1), datetime.max.time())), exact=True)
-    #     self.assertEqual(qs.get().event, self.christmas)
+        # two christmases (2015 + 2016) and the future event (2016-01-01)
+        dates = list(occs.all_occurrences(
+            from_date=aware(datetime.combine(date(2015, 1, 1), datetime.min.time())),
+            to_date=aware(datetime.combine(date(2016, 12, 31), datetime.max.time())),
+        ))
+        self.assertEqual(len(dates), 3)
 
-    #     qs = occs.for_period(from_date=timezone.make_aware(datetime.combine(date(2017, 1, 1), datetime.min.time())),
-    #                          to_date=timezone.make_aware(datetime.combine(date(2017, 12, 31), datetime.max.time())),
-    #                          exact=True)
-    #     self.assertEqual(qs.get().event, self.christmas)
+        # one christmas (2000-12-25) and the past event (2014-01-01)
+        dates = list(occs.all_occurrences(
+            from_date=aware(datetime.combine(date(2014, 1, 1), datetime.min.time())),
+            to_date=aware(datetime.combine(date(2014, 12, 31), datetime.max.time())),
+        ))
+        self.assertEqual(len(dates), 2)
 
-    # @override_settings(USE_TZ=True)
-    # def test_occurrence_qs_tz(self):
-    #     self.test_occurrence_qs()
+        # test queryset filtering
+        qs = occs.for_period(
+            from_date=aware(datetime.combine(date(2015, 1, 1), datetime.min.time())),
+            exact=True
+        )
+        self.assertEqual(qs.count(), 2)
 
-    # def test_single_event(self):
-    #     # one christmas per year
-    #     for i in range(0, 10):
-    #         from_date = self.first_of_year + relativedelta(years=i)
-    #         to_date = self.first_of_year + relativedelta(years=i + 1)
-    #         count = len(list(self.christmas.all_occurrences(
-    #             from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #             to_date=timezone.make_aware(datetime.combine(to_date, datetime.max.time())))))
-    #         self.assertEqual(count, 1)
+        qs = occs.for_period(
+            to_date=aware(datetime.combine(date(2010, 1, 1), datetime.max.time())),
+            exact=True
+        )
+        self.assertEqual(qs.get().event, self.christmas)
 
-    #     # but none in the first half of the year
-    #     from_date = self.first_of_year + relativedelta(years=1)
-    #     to_date = self.first_of_year + relativedelta(months=6)
-    #     count = len(list(self.christmas.all_occurrences(
-    #         from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #         to_date=timezone.make_aware(datetime.combine(to_date, datetime.max.time())))))
-    #     self.assertEqual(count, 0)
+        qs = occs.for_period(
+            from_date=aware(datetime.combine(date(2017, 1, 1), datetime.min.time())),
+            to_date=aware(datetime.combine(date(2017, 12, 31), datetime.max.time())),
+            exact=True
+        )
+        self.assertEqual(qs.get().event, self.christmas)
 
-    #     # check the daily event happens on some arbitrary dates
-    #     for days in (10, 30, 50, 80, 100):
-    #         from_date = self.first_of_year + timedelta(days=days)
-    #         count = len(list(self.daily.all_occurrences(
-    #             from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #             to_date=timezone.make_aware(datetime.combine(from_date, datetime.max.time()))
-    #         )))
-    #         self.assertEqual(count, 1)
+    def test_occurrence_qs_tz(self):
+        self.test_occurrence_qs()
 
-    #     # check the the weekend event occurs as expected in a series of 2 day
-    #     # periods
-    #     for days in range(1, 50):
-    #         from_date = self.first_of_year + timedelta(days=days)
+    def test_single_event(self):
+        tz = ZoneInfo(self.christmas.tz)  # "UTC" from setUp()
 
-    #         if from_date.weekday() == 5:
-    #             expected = 2  # whole weekend
-    #         elif from_date.weekday() in (4, 6):
-    #             expected = 1  # one weekend day
-    #         else:
-    #             expected = 0  # no weekend days
+        def aware_day_start(d):
+            return timezone.make_aware(datetime.combine(d, datetime.min.time()), tz)
 
-    #         occs = list(self.weekends.all_occurrences(
-    #             from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #             to_date=timezone.make_aware(datetime.combine(from_date + timedelta(1), datetime.max.time()))
-    #         ))
-    #         self.assertEqual(len(occs), expected)
+        def aware_day_end(d):
+            return timezone.make_aware(datetime.combine(d, datetime.max.time()), tz)
 
-    # @override_settings(USE_TZ=True)
-    # def test_single_event_tz(self):
-    #     self.test_single_event()
+        # one christmas per year
+        for i in range(0, 10):
+            from_date = self.first_of_year + relativedelta(years=i)
+            to_date = self.first_of_year + relativedelta(years=i + 1)
+            count = len(list(self.christmas.all_occurrences(
+                from_date=aware_day_start(from_date),
+                to_date=aware_day_end(to_date),
+            )))
+            self.assertEqual(count, 1)
 
-    # def test_event_queryset(self):
-    #     # one christmas per year
-    #     christmas_qs = MyEvent.objects.filter(pk=self.christmas.pk)
-    #     for i in range(0, 10):
-    #         from_date = self.first_of_year + relativedelta(years=i)
-    #         to_date = self.first_of_year + relativedelta(years=i + 1)
-    #         occs = list(christmas_qs.all_occurrences(
-    #             from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #             to_date=timezone.make_aware(datetime.combine(to_date, datetime.max.time()))))
-    #         self.assertEqual(len(occs), 1)
+        # but none in the first half of the year
+        from_date = self.first_of_year + relativedelta(years=1)
+        to_date = self.first_of_year + relativedelta(months=6)
+        count = len(list(self.christmas.all_occurrences(
+            from_date=aware_day_start(from_date),
+            to_date=aware_day_end(to_date),
+        )))
+        self.assertEqual(count, 0)
 
-    #     # but none in the first half of the year
-    #     from_date = self.first_of_year + relativedelta(years=1)
-    #     to_date = self.first_of_year + relativedelta(months=6)
-    #     occs = list(christmas_qs.all_occurrences(
-    #         from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #         to_date=timezone.make_aware(datetime.combine(to_date, datetime.max.time()))))
-    #     self.assertEqual(len(occs), 0)
+        # check the daily event happens on some arbitrary dates
+        for days in (10, 30, 50, 80, 100):
+            d = self.first_of_year + timedelta(days=days)
+            count = len(list(self.daily.all_occurrences(
+                from_date=aware_day_start(d),
+                to_date=aware_day_end(d),
+            )))
+            self.assertEqual(count, 1)
 
-    #     def sorted_events(events):
-    #         return sorted(events, key=lambda obj: obj.pk)
+        # check the weekend event occurs as expected in a series of 2 day periods
+        for days in range(1, 50):
+            d = self.first_of_year + timedelta(days=days)
 
-    #     def expected(for_date):
-    #         """Return ids of events expected to occur on a given date. """
+            if d.weekday() == 5:
+                expected = 2  # whole weekend
+            elif d.weekday() in (4, 6):
+                expected = 1  # one weekend day
+            else:
+                expected = 0  # no weekend days
 
-    #         events = [self.daily]
-    #         if for_date.month == 12 and for_date.day == 25:
-    #             events.append(self.christmas)
-    #         if for_date.weekday() in (5, 6):
-    #             events.append(self.weekends)
-    #         return sorted_events(events)
+            occs = list(self.weekends.all_occurrences(
+                from_date=aware_day_start(d),
+                to_date=aware_day_end(d + timedelta(1)),
+            ))
+            self.assertEqual(len(occs), expected)
 
-    #     # check the number of events for some arbitrary dates
-    #     for days in (8, 16, 24, 32, 40, 48, 56):
-    #         from_date = self.first_of_year + timedelta(days=days)
-    #         qs = MyEvent.objects.for_period(
-    #             from_date=timezone.make_aware(datetime.combine(from_date, datetime.min.time())),
-    #             to_date=timezone.make_aware(datetime.combine(from_date, datetime.max.time())),
-    #             exact=True,
-    #         ).distinct()
+    def test_single_event_tz(self):
+        self.test_single_event()
 
-    #         events = sorted_events(list(qs))
-    #         self.assertEqual(events, expected(from_date))
+    def test_event_queryset(self):
+        tz = ZoneInfo(self.christmas.tz)  # "UTC" from setUp()
 
-    #     # test queryset filtering
-    #     events = MyEvent.objects.filter(
-    #         pk__in=(self.christmas.pk, self.future.pk, self.past.pk))
+        def aware_day_start(d):
+            return timezone.make_aware(datetime.combine(d, datetime.min.time()), tz)
 
-    #     qs = events.for_period(from_date=timezone.make_aware(datetime.combine(date(2015, 1, 1), datetime.min.time())), exact=True)
-    #     self.assertEqual(qs.count(), 2)
+        def aware_day_end(d):
+            return timezone.make_aware(datetime.combine(d, datetime.max.time()), tz)
 
-    #     qs = events.for_period(to_date=timezone.make_aware(datetime.combine(date(2010, 1, 1), datetime.max.time())), exact=True)
-    #     self.assertEqual(qs.get(), self.christmas)
+        # one christmas per year
+        christmas_qs = MyEvent.objects.filter(pk=self.christmas.pk)
+        for i in range(0, 10):
+            from_d = self.first_of_year + relativedelta(years=i)
+            to_d = self.first_of_year + relativedelta(years=i + 1)
+            occs = list(christmas_qs.all_occurrences(
+                from_date=aware_day_start(from_d),
+                to_date=aware_day_end(to_d),
+            ))
+            self.assertEqual(len(occs), 1)
 
-    #     qs = events.for_period(from_date=timezone.make_aware(datetime.combine(date(2017, 1, 1), datetime.min.time())),
-    #                            to_date=timezone.make_aware(datetime.combine(date(2017, 12, 31), datetime.max.time())),
-    #                            exact=True)
-    #     self.assertEqual(qs.get(), self.christmas)
+        # but none in the first half of the year
+        from_d = self.first_of_year + relativedelta(years=1)
+        to_d = self.first_of_year + relativedelta(months=6)
+        occs = list(christmas_qs.all_occurrences(
+            from_date=aware_day_start(from_d),
+            to_date=aware_day_end(to_d),
+        ))
+        self.assertEqual(len(occs), 0)
 
-    # @override_settings(USE_TZ=True)
+        def sorted_events(events):
+            return sorted(events, key=lambda obj: obj.pk)
+
+        def expected(for_date):
+            events = [self.daily]
+            if for_date.month == 12 and for_date.day == 25:
+                events.append(self.christmas)
+            if for_date.weekday() in (5, 6):
+                events.append(self.weekends)
+            return sorted_events(events)
+
+        # check the number of events for some arbitrary dates
+        for days in (8, 16, 24, 32, 40, 48, 56):
+            d = self.first_of_year + timedelta(days=days)
+            qs = MyEvent.objects.for_period(
+                from_date=aware_day_start(d),
+                to_date=aware_day_end(d),
+                exact=True,
+            ).distinct()
+
+            events = sorted_events(list(qs))
+            self.assertEqual(events, expected(d))
+
+        # test queryset filtering
+        events = MyEvent.objects.filter(pk__in=(self.christmas.pk, self.future.pk, self.past.pk))
+
+        qs = events.for_period(from_date=aware_day_start(date(2015, 1, 1)), exact=True)
+        self.assertEqual(qs.count(), 2)
+
+        qs = events.for_period(to_date=aware_day_end(date(2010, 1, 1)), exact=True)
+        self.assertEqual(qs.get(), self.christmas)
+
+        qs = events.for_period(
+            from_date=aware_day_start(date(2017, 1, 1)),
+            to_date=aware_day_end(date(2017, 12, 31)),
+            exact=True,
+        )
+        self.assertEqual(qs.get(), self.christmas)
+
     # def test_event_queryset_tz(self):
     #     self.test_event_queryset()
 
-    # def test_occurrence_data(self):
-    #     occ = self.christmas.get_related_occurrences().get()
-    #     self.assertEqual(occ.next_occurrence()[2], occ.occurrence_data)
+    def test_occurrence_data(self):
+        occ = self.christmas.get_related_occurrences().get()
+        self.assertEqual(occ.next_occurrence()[2], occ.occurrence_data)
 
-    # def test_repeat_until(self):
-    #     # check repeating event when to_date is less than repeat_until
-    #     occs = self.monthly.all_occurrences(from_date=timezone.make_aware(datetime.combine(date(2016, 4, 1), datetime.min.time())),
-    #                                         to_date=timezone.make_aware(datetime.combine(date(2016, 4, 30), datetime.max.time())))
-    #     self.assertEqual(len(list(occs)), 1)
+    def test_repeat_until(self):
+        tz = ZoneInfo(self.monthly.tz)  # "UTC" from setUp()
 
-    # def test_occurrence_limit(self):
-    #     test_objs = [
-    #         self.daily,
-    #         MyEvent.objects.filter(pk=self.daily.pk),
-    #         self.daily.get_related_occurrences().all(),
-    #         self.daily.get_related_occurrences().get(),
-    #     ]
-    #     for obj in test_objs:
-    #         self.assertEqual(len(list(obj.all_occurrences(limit=20))), 20)
-    #         self.assertEqual(len(list(obj.all_occurrences())), REPEAT_MAX)
+        occs = self.monthly.all_occurrences(
+            from_date=timezone.make_aware(datetime.combine(date(2016, 4, 1), datetime.min.time()), tz),
+            to_date=timezone.make_aware(datetime.combine(date(2016, 4, 30), datetime.max.time()), tz),
+        )
+        self.assertEqual(len(list(occs)), 1)
+
+    def test_occurrence_limit(self):
+        test_objs = [
+            self.daily,
+            MyEvent.objects.filter(pk=self.daily.pk),
+            self.daily.get_related_occurrences().all(),
+            self.daily.get_related_occurrences().get(),
+        ]
+        for obj in test_objs:
+            self.assertEqual(len(list(obj.all_occurrences(limit=20))), 20)
+            self.assertEqual(len(list(obj.all_occurrences())), REPEAT_MAX)
 
     # def test_non_repeating_intersection(self):
     #     occ = self.past.get_related_occurrences().get()
