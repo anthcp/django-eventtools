@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from dateutil import rrule
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
+from django.core.exceptions import ImproperlyConfigured
 
 from django.conf import settings
 from django.db import models
@@ -40,13 +41,20 @@ def first_item(gen):
         return None
 
 
-def default_aware(dt):
-    """Convert a naive datetime argument to a tz-aware datetime, if tz support
-       is enabled. """
-    if settings.USE_TZ and timezone.is_naive(dt):
-        # Use the current (or default) Django timezone, which is ZoneInfo in modern Django
-        return timezone.make_aware(dt, timezone.get_current_timezone())
-    return dt
+# def default_aware(dt):
+#     """Convert a naive datetime argument to a tz-aware datetime, if tz support
+#        is enabled. """
+#     if settings.USE_TZ and timezone.is_naive(dt):
+#         # Use the current (or default) Django timezone, which is ZoneInfo in modern Django
+#         return timezone.make_aware(dt, timezone.get_current_timezone())
+#     return dt
+
+def default_aware(dt, event_tz):
+    if dt is None:
+        return None
+    if timezone.is_aware(dt):
+        return dt
+    return timezone.make_aware(dt, event_tz)
 
 # def default_naive(dt):
 #     """Convert an aware datetime argument to naive, if tz support
@@ -57,22 +65,47 @@ def default_aware(dt):
 #     return dt
 
 
-def as_datetime(d, end=False):
-    """Normalise a date/datetime argument to a datetime for use in filters
+# def as_datetime(d, end=False):
+#     """Normalise a date/datetime argument to a datetime for use in filters
 
-    If a date is passed, it will be converted to a datetime with the time set
-    to 0:00, or 23:59:59 if end is True."""
+#     If a date is passed, it will be converted to a datetime with the time set
+#     to 0:00, or 23:59:59 if end is True."""
 
-    if type(d) is date:
-        date_args = tuple(d.timetuple())[:3]
-        if end:
-            time_args = (23, 59, 59)
-        else:
-            time_args = (0, 0, 0)
-        new_value = datetime(*(date_args + time_args))
-        return default_aware(new_value)
-    # otherwise assume it's a datetime
-    return default_aware(d)
+#     if type(d) is date:
+#         date_args = tuple(d.timetuple())[:3]
+#         if end:
+#             time_args = (23, 59, 59)
+#         else:
+#             time_args = (0, 0, 0)
+#         new_value = datetime(*(date_args + time_args))
+#         return default_aware(new_value)
+#     # otherwise assume it's a datetime
+#     return default_aware(d)
+
+def as_datetime(d, tz, end=False, *, allow_naive=False):
+    """
+    Normalize a date/datetime to an aware datetime in the provided tz.
+
+    - date -> start/end of day in tz
+    - aware datetime -> converted to tz
+    - naive datetime -> raises unless allow_naive=True, then assumes tz
+    """
+    if d is None:
+        return None
+
+    if isinstance(d, date) and not isinstance(d, datetime):
+        t = time(23, 59, 59) if end else time(0, 0, 0)
+        dt = datetime.combine(d, t)
+        return timezone.make_aware(dt, tz)
+
+    # datetime
+    if timezone.is_naive(d):
+        if not allow_naive:
+            raise ValueError("Naive datetime passed to as_datetime(); supply tz-aware datetime")
+        d = timezone.make_aware(d, tz)
+
+    return d.astimezone(tz)
+
 
 
 def combine_occurrences(generators, limit):
@@ -237,13 +270,58 @@ class EventQuerySet(BaseQuerySet):
 class EventManager(models.Manager.from_queryset(EventQuerySet)):
     use_for_related_fields = True
 
+def default_event_timezone():
+    return settings.TIME_ZONE
 
+def validate_timezone(value):
+    try:
+        ZoneInfo(value)
+    except Exception:
+        raise ValidationError(f"Invalid timezone: {value}")
+    
 class BaseEvent(BaseModel):
     """Abstract model providing occurrence-related methods for events.
-
        Subclasses should have a related BaseOccurrence subclass. """
+    
+    tz = models.CharField(
+        max_length=64,
+        default=default_event_timezone,
+        help_text="IANA timezone, e.g. America/New_York",
+        validators=[validate_timezone],
+    )
 
     objects = EventManager()
+
+    def set_timezone(self, new_tz: str, *, preserve_instant=False):
+        """
+        Change the event timezone.
+
+        preserve_instant=False:
+            Keep wall-clock times the same (10:00 stays 10:00).
+            This is the default for recurring events.
+
+        preserve_instant=True:
+            Keep the absolute instant the same (UTC preserved).
+        """
+        old_tz = ZoneInfo(self.tz)
+        new_tz = ZoneInfo(new_tz)
+
+        for occ in self.get_related_occurrences():
+            if preserve_instant:
+                # Keep the instant; wall time may change
+                occ.start = occ.start.astimezone(new_tz)
+                if occ.end:
+                    occ.end = occ.end.astimezone(new_tz)
+            else:
+                # Keep wall time; instant changes
+                occ.start = occ.start.replace(tzinfo=new_tz)
+                if occ.end:
+                    occ.end = occ.end.replace(tzinfo=new_tz)
+
+            occ.save(update_fields=["start", "end"])
+
+        self.tz = str(new_tz)
+        self.save(update_fields=["tz"])
 
     @classmethod
     def get_occurrence_relation(cls):
@@ -274,9 +352,51 @@ class BaseEvent(BaseModel):
         return self.get_related_occurrences().all_occurrences(
             from_date, to_date, limit=limit)
 
+    @classmethod
+    def get_occurrence_relation(cls):
+        occurrence_relation_name = None
+
+    @classmethod
+    def get_occurrence_relation(cls):
+        # 1) If explicitly configured, use it.
+        if cls.occurrence_relation_name:
+            rel = cls._meta.get_field(cls.occurrence_relation_name)
+
+            if not isinstance(rel, models.ManyToOneRel):
+                raise ImproperlyConfigured(
+                    f"{cls.__name__}.occurrence_relation_name must refer to a reverse FK "
+                    f"(got {type(rel).__name__})"
+                )
+
+            if not issubclass(rel.related_model, BaseOccurrence):
+                raise ImproperlyConfigured(
+                    f"{cls.__name__}.{cls.occurrence_relation_name} does not point to a BaseOccurrence subclass"
+                )
+            return rel
+
+        # 2) Otherwise auto-detect, but fail fast if ambiguous.
+        relations = [
+            rel for rel in cls._meta.get_fields()
+            if isinstance(rel, models.ManyToOneRel)
+            and issubclass(rel.related_model, BaseOccurrence)
+        ]
+
+        if not relations:
+            raise ImproperlyConfigured(
+                f"{cls.__name__} has no related BaseOccurrence models"
+            )
+
+        if len(relations) > 1:
+            raise ImproperlyConfigured(
+                f"{cls.__name__} has multiple occurrence relations; set occurrence_relation_name. "
+                f"Found: {[r.name for r in relations]}"
+            )
+
+        return relations[0]
+    
     class Meta:
         abstract = True
-
+    
 
 class OccurrenceQuerySet(BaseQuerySet):
     """QuerySet for BaseOccurrence subclasses. """
@@ -341,106 +461,226 @@ class ChoiceTextField(models.TextField):
 class BaseOccurrence(BaseModel):
     """Abstract model providing occurrence-related methods for occurrences.
 
-       Subclasses will usually have a ForeignKey pointing to a BaseEvent
-       subclass. """
+    Subclasses will usually have a ForeignKey pointing to a BaseEvent subclass
+    (commonly named `event`).
+    """
 
-    start = models.DateTimeField(db_index=True, verbose_name=_('start'))
-    end = models.DateTimeField(
-        db_index=True, null=True, blank=True, verbose_name=_('end'))
+    start = models.DateTimeField(db_index=True, verbose_name=_("start"))
+    end = models.DateTimeField(db_index=True, null=True, blank=True, verbose_name=_("end"))
 
     repeat = ChoiceTextField(
-        choices=REPEAT_CHOICES, default='', blank=True,
-        verbose_name=_('repeat'))
-    repeat_until = models.DateField(
-        null=True, blank=True, verbose_name=_('repeat_until'))
-    
-    # New field: per-occurrence timezone (ZoneInfo object)
-    event_timezone = TimeZoneField(default=settings.TIME_ZONE)
+        choices=REPEAT_CHOICES, default="", blank=True, verbose_name=_("repeat")
+    )
+    repeat_until = models.DateField(null=True, blank=True, verbose_name=_("repeat_until"))
+
+    objects = OccurrenceManager()
+
+    class Meta:
+        ordering = ("start", "end")
+        abstract = True
+
+    def __str__(self):
+        return "%s" % (self.start,)
+
+    @property
+    def occurrence_data(self):
+        return self
 
     def clean(self):
         # Existing validation
         if self.start and self.end and self.start >= self.end:
-            msg = u"End must be after start"
-            raise ValidationError(msg)
+            raise ValidationError("End must be after start")
 
         if self.repeat_until and not self.repeat:
-            msg = u"Select a repeat interval, or remove the " \
-                  u"'repeat until' date"
-            raise ValidationError(msg)
+            raise ValidationError("Select a repeat interval, or remove the 'repeat until' date")
 
-        if self.start and self.repeat_until and \
-           self.repeat_until < self.start.date():
-            msg = u"'Repeat until' cannot be before the first occurrence"
-            raise ValidationError(msg)
+        if self.start and self.repeat_until and self.repeat_until < self.start.date():
+            raise ValidationError("'Repeat until' cannot be before the first occurrence")
 
-        # New: Make start/end aware UTC, assuming inputs naive in event_timezone
-        local_tz = self.event_timezone  # ZoneInfo object
-        self.start = default_aware(self.start, local_tz).astimezone(utc_tz)
-        if self.end:
-            self.end = default_aware(self.end, local_tz).astimezone(utc_tz)
+        if settings.USE_TZ:
+            # Require FK + event timezone
+            if not getattr(self, "event_id", None):
+                raise ValidationError("Occurrence must be attached to an event when USE_TZ=True")
 
-    objects = OccurrenceManager()
+            event_tz = ZoneInfo(self.event.tz)
 
-    def all_occurrences(self, from_date=None, to_date=None, limit=REPEAT_MAX):
-        """Return a generator yielding a (start, end) tuple for all dates
-           for this occurrence, taking repetition into account. """
+            # Enforce awareness (strict policy)
+            if self.start and timezone.is_naive(self.start):
+                raise ValidationError("start must be timezone-aware")
+            if self.end and timezone.is_naive(self.end):
+                raise ValidationError("end must be timezone-aware")
 
-        if not self.start:
-            return
-
-        from_date = from_date and default_aware(from_date, utc_tz)
-        to_date = to_date and default_aware(to_date, utc_tz)
-
-        if not self.repeat:
-            if (not from_date or self.start >= from_date or
-                (self.end and self.end >= from_date)) and \
-               (not to_date or self.start <= to_date):
-                yield (self.start, self.end, self.occurrence_data)
-            return
-
-        delta = (self.end - self.start) if self.end else timedelta(0)
-        repeater = self.get_repeater()
-
-        # start from the first occurrence at the earliest
-        if not from_date or from_date < self.start:
-            from_date = self.start
-
-        # look until the last occurrence, up to an arbitrary maximum date
-        if self.repeat_until and (
-                not to_date or
-                default_aware(datetime.combine(self.repeat_until, datetime.max.time()), utc_tz) < to_date):
-            to_date = default_aware(datetime.combine(self.repeat_until, datetime.max.time()), utc_tz)
-        elif not to_date:
-            to_date = default_aware(datetime.max, utc_tz)  # Arbitrary far future
-
-        # start is used for the filter, so modify from_date to take the
-        # occurrence length into account
-        from_date -= delta
-
-        # Use aware datetimes directly (no default_naive)
-        repeater_iter = repeater.between(from_date, to_date, inc=True)
-
-        count = 0
-        for occ_start in repeater_iter:
-            count += 1
-            if count > limit:
-                return
-
-            occ_end = occ_start + delta if self.end else None
-            yield (occ_start, occ_end, self.occurrence_data)
+            # Normalize into event tz (keeps semantics consistent)
+            if self.start:
+                self.start = self.start.astimezone(event_tz)
+            if self.end:
+                self.end = self.end.astimezone(event_tz)
+        return
 
     def get_repeater(self):
-        """Get rruleset instance representing this occurrence's repetitions.
-        Subclasses may override this method for custom repeat behaviour.
-        """
+        """Return an rruleset for this occurrence, evaluated in the event timezone."""
         if not self.repeat:
             return None
 
-        # Use aware dtstart (stored as UTC)
-        dtstart = self.start  # aware UTC
+        event_tz = ZoneInfo(self.event.tz)
+        dtstart_local = self.start.astimezone(event_tz)
 
         ruleset = rrule.rruleset()
-        rule = rrule.rrulestr(self.repeat, dtstart=dtstart)
+        rule = rrule.rrulestr(self.repeat, dtstart=dtstart_local)
+        ruleset.rrule(rule)
+        return ruleset
+
+    def all_occurrences(self, from_date=None, to_date=None, limit=REPEAT_MAX):
+        """Yield (start, end, occurrence_data) tuples.
+        All recurrence math is performed in the event timezone (event.tz) so that
+        wall-clock time stays stable across DST.
+        """
+        if not self.start:
+            return
+
+        event_tz = ZoneInfo(self.event.tz)
+        start_local = self.start.astimezone(event_tz)
+        end_local = self.end.astimezone(event_tz) if self.end else None
+
+        # Normalize window to event timezone
+        if from_date is not None:
+            if timezone.is_naive(from_date):
+                raise ValueError("from_date must be timezone-aware")
+            from_date = from_date.astimezone(event_tz)
+
+        if to_date is not None:
+            if timezone.is_naive(to_date):
+                raise ValueError("to_date must be timezone-aware")
+            to_date = to_date.astimezone(event_tz)
+
+        # Non-repeating case
+        if not self.repeat:
+            if (from_date is None or start_local >= from_date or (end_local and end_local >= from_date)) and \
+               (to_date is None or start_local <= to_date):
+                yield (start_local, end_local, self.occurrence_data)
+            return
+
+        # Repeating case
+        delta = (end_local - start_local) if end_local else timedelta(0)
+        repeater = self.get_repeater()
+
+        # Start from earliest relevant moment
+        if from_date is None or from_date < start_local:
+            from_date = start_local
+
+        # Apply repeat_until bound (in event timezone)
+        if self.repeat_until:
+            until_dt = timezone.make_aware(
+                datetime.combine(self.repeat_until, datetime.max.time()),
+                event_tz,
+            )
+            if to_date is None or until_dt < to_date:
+                to_date = until_dt
+
+        # Account for intersection semantics (event overlaps from_date if it started earlier)
+        cursor = from_date - delta
+
+        count = 0
+        while limit is None or count < limit:
+            occ_start = repeater.after(cursor, inc=True)
+            if occ_start is None:
+                return
+            if to_date is not None and occ_start > to_date:
+                return
+
+            occ_end = (occ_start + delta) if end_local else None
+            yield (occ_start, occ_end, self.occurrence_data)
+
+            count += 1
+            cursor = occ_start + timedelta(microseconds=1)
+
+
+def all_occurrences(self, from_date=None, to_date=None, limit=REPEAT_MAX):
+    if not self.start:
+        return
+
+    event_tz = ZoneInfo(self.event.tz)
+
+    # normalize from_date/to_date into event_tz
+    if from_date is not None:
+        if timezone.is_naive(from_date):
+            raise ValueError("from_date must be timezone-aware")
+        from_date = from_date.astimezone(event_tz)
+
+    if to_date is not None:
+        if timezone.is_naive(to_date):
+            raise ValueError("to_date must be timezone-aware")
+        to_date = to_date.astimezone(event_tz)
+
+    start_local = self.start.astimezone(event_tz)
+    end_local = self.end.astimezone(event_tz) if self.end else None
+
+    if not self.repeat:
+        if (from_date is None or start_local >= from_date or
+            (end_local and end_local >= from_date)) and \
+           (to_date is None or start_local <= to_date):
+            yield (start_local, end_local, self.occurrence_data)
+        return
+
+    delta = (end_local - start_local) if end_local else timedelta(0)
+    repeater = self.get_repeater()  # built with dtstart in event_tz
+
+    # start from earliest relevant point
+    if from_date is None or from_date < start_local:
+        from_date = start_local
+
+    # apply repeat_until bound (in event_tz)
+    if self.repeat_until:
+        until_dt = timezone.make_aware(
+            datetime.combine(self.repeat_until, datetime.max.time()),
+            event_tz
+        )
+        if to_date is None or until_dt < to_date:
+            to_date = until_dt
+
+    # account for duration intersection semantics
+    from_date = from_date - delta
+
+    count = 0
+    cursor = from_date
+
+    while limit is None or count < limit:
+        occ_start = repeater.after(cursor, inc=True)
+        if occ_start is None:
+            return
+        if to_date is not None and occ_start > to_date:
+            return
+
+        occ_end = occ_start + delta if end_local else None
+        yield (occ_start, occ_end, self.occurrence_data)
+
+        count += 1
+        cursor = occ_start + timedelta(microseconds=1)
+
+
+
+    # def get_repeater(self):
+    #     """Get rruleset instance representing this occurrence's repetitions.
+    #     Subclasses may override this method for custom repeat behaviour.
+    #     """
+    #     if not self.repeat:
+    #         return None
+
+    #     # Use aware dtstart (stored as UTC)
+    #     dtstart = self.start  # aware UTC
+    #     ruleset = rrule.rruleset()
+    #     rule = rrule.rrulestr(self.repeat, dtstart=dtstart)
+    #     ruleset.rrule(rule)
+    #     return ruleset
+
+    def get_repeater(self):
+        if not self.repeat:
+            return None
+        # Build rules in the *local* timezone so wall time stays stable across DST
+        event_tz = timezone.get_current_timezone()
+        dtstart_local = timezone.localtime(self.start, event_tz)
+        ruleset = rrule.rruleset()
+        rule = rrule.rrulestr(self.repeat, dtstart=dtstart_local)
         ruleset.rrule(rule)
         return ruleset
 
