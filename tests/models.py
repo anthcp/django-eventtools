@@ -13,5 +13,5 @@ class MyOccurrence(BaseOccurrence):
     event = models.ForeignKey(MyEvent, on_delete=models.CASCADE)
 
 
-class MyOtherOccurrence(BaseOccurrence):
-    event = models.ForeignKey(MyEvent, on_delete=models.CASCADE)
+# class MyOtherOccurrence(BaseOccurrence):
+#     event = models.ForeignKey(MyEvent, on_delete=models.CASCADE)
