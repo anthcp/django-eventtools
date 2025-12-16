@@ -13,7 +13,8 @@ from django.utils import timezone
 
 from django.utils.translation import gettext_lazy as _
 
-from six import python_2_unicode_compatible
+from zoneinfo import ZoneInfo
+from django.core.exceptions import ValidationError
 
 
 # set EVENTTOOLS_REPEAT_CHOICES = None to make this a plain textfield
@@ -252,11 +253,27 @@ class EventQuerySet(BaseQuerySet):
 class EventManager(models.Manager.from_queryset(EventQuerySet)):
     use_for_related_fields = True
 
+def default_event_timezone():
+    return settings.TIME_ZONE
+
+def validate_timezone(value):
+    try:
+        ZoneInfo(value)
+    except Exception:
+        raise ValidationError(f"Invalid timezone: {value}")
+
 
 class BaseEvent(BaseModel):
     """Abstract model providing occurrence-related methods for events.
 
        Subclasses should have a related BaseOccurrence subclass. """
+
+    tz = models.CharField(
+        max_length=64,
+        default=default_event_timezone,
+        help_text="IANA timezone, e.g. America/New_York",
+        validators=[validate_timezone],
+    )
 
     objects = EventManager()
 
@@ -352,7 +369,6 @@ class ChoiceTextField(models.TextField):
         return super(ChoiceTextField, self).formfield(**kwargs)
 
 
-@python_2_unicode_compatible
 class BaseOccurrence(BaseModel):
     """Abstract model providing occurrence-related methods for occurrences.
 
