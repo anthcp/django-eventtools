@@ -8,25 +8,25 @@ from zoneinfo import ZoneInfo
 from django.test import TestCase
 from django.utils import timezone as dj_timezone
 
-from .models import Event, Occurrence
+from .models import BaseEvent, BaseOccurrence
 
-class EventModelTest(TestCase):
+class BaseEventModelTest(TestCase):
     def setUp(self):
-        self.event = Event.objects.create(name="Test Event")
+        self.event = BaseEvent.objects.create(name="Test Event")
 
     def test_str(self):
         self.assertEqual(str(self.event), "Test Event")
 
-class OccurrenceModelTest(TestCase):
+class BaseOccurrenceModelTest(TestCase):
     def setUp(self):
-        self.event = Event.objects.create(name="Weekly Meeting")
+        self.event = BaseEvent.objects.create(name="Weekly Meeting")
         self.tz = ZoneInfo("America/New_York")
         self.start = datetime(2025, 12, 16, 10, 0, tzinfo=self.tz)
         self.end = datetime(2025, 12, 16, 11, 0, tzinfo=self.tz)
         self.exdate = datetime(2025, 12, 23, 10, 0, tzinfo=self.tz)
         self.rdate = datetime(2025, 12, 30, 10, 0, tzinfo=self.tz)  # Extra date
 
-        self.occurrence = Occurrence.objects.create(
+        self.occurrence = BaseOccurrence.objects.create(
             event=self.event,
             start=self.start,
             end=self.end,
@@ -42,7 +42,7 @@ class OccurrenceModelTest(TestCase):
 
     def test_save_timezone_awareness(self):
         naive_start = datetime(2025, 12, 16, 10, 0)
-        occ = Occurrence.objects.create(
+        occ = BaseOccurrence.objects.create(
             event=self.event,
             start=naive_start,
             timezone="America/New_York"
@@ -91,7 +91,7 @@ class OccurrenceModelTest(TestCase):
         self.assertEqual(occs[0][1], occs[0][0] + timedelta(hours=1))
 
     def test_generate_occurrences_non_recurring(self):
-        non_rec = Occurrence.objects.create(
+        non_rec = BaseOccurrence.objects.create(
             event=self.event,
             start=self.start,
             end=self.end,
@@ -151,7 +151,7 @@ class OccurrenceModelTest(TestCase):
     def test_queryset_for_period_exact(self):
         from_date = datetime(2025, 12, 1, 0, 0, tzinfo=self.tz)
         to_date = datetime(2026, 1, 1, 0, 0, tzinfo=self.tz)
-        occs = Occurrence.objects.for_period(from_date, to_date, exact=True)
+        occs = BaseOccurrence.objects.for_period(from_date, to_date, exact=True)
         self.assertEqual(len(occs), 1)  # Only one Occurrence instance, but generates multiple dates
 
         # Wait, for_period returns list of Occurrence instances that have occs in period
@@ -166,7 +166,7 @@ class OccurrenceModelTest(TestCase):
     def test_queryset_sort_by_next(self):
         # Add another occurrence
         another_start = datetime(2025, 12, 18, 9, 0, tzinfo=self.tz)
-        another = Occurrence.objects.create(
+        another = BaseOccurrence.objects.create(
             event=self.event,
             start=another_start,
             timezone="America/New_York",
@@ -174,7 +174,7 @@ class OccurrenceModelTest(TestCase):
         )
 
         from_date = datetime(2025, 12, 17, 0, 0, tzinfo=self.tz)
-        sorted_occs = Occurrence.objects.sort_by_next(from_date)
+        sorted_occs = BaseOccurrence.objects.sort_by_next(from_date)
         # Next for self.occurrence: 12/30
         # Next for another: 12/18
         self.assertEqual(sorted_occs[0], another)

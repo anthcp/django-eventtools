@@ -13,7 +13,15 @@ from django.utils import timezone as dj_timezone
 from dateutil.rrule import rrulestr, rruleset
 from dateutil.parser import parse as date_parse
 
-class Event(models.Model):
+
+class BaseModel(models.Model):
+    """Abstract model providing common occurrence-related functionality. """
+
+    class Meta:
+        abstract = True
+
+class BaseEvent(BaseModel):
+#class Event(models.Model):
     """
     Base event model. Extend this for your custom fields (e.g., title, description).
     """
@@ -91,11 +99,12 @@ class OccurrenceQuerySet(models.QuerySet):
         occs_with_next.sort(key=lambda x: x[0])
         return [o[1] for o in occs_with_next]
 
-class Occurrence(models.Model):
+class BaseOccurrence(BaseModel):
+#class Occurrence(models.Model):
     """
     Occurrence model for events. Can be one-off or recurring.
     """
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='occurrences')
+    event = models.ForeignKey(BaseEvent, on_delete=models.CASCADE, related_name='occurrences')
     start = models.DateTimeField()
     end = models.DateTimeField(null=True, blank=True)  # Optional for all-day or open-ended
     rrule = models.TextField(blank=True, null=True)  # RRULE string
@@ -180,11 +189,11 @@ class Occurrence(models.Model):
         return occs[0][0] if occs else None
 
 # Example usage in a Django view or shell:
-# from recurring_events_tz.models import Event, Occurrence
+# from recurring_events_tz.models import BaseEvent, BaseOccurrence
 # from datetime import datetime
 #
-# event = Event.objects.create(name="Weekly Meeting")
-# Occurrence.objects.create(
+# event = BaseEvent.objects.create(name="Weekly Meeting")
+# BaseOccurrence.objects.create(
 #     event=event,
 #     start=datetime(2025, 12, 16, 10, 0),
 #     end=datetime(2025, 12, 16, 11, 0),
@@ -198,6 +207,6 @@ class Occurrence(models.Model):
 #     print(f"{event.name}: {start} to {end}")
 #
 # # Queryset examples
-# occ_qs = Occurrence.objects.all()
+# occ_qs = BaseOccurrence.objects.all()
 # occs_in_period = occ_qs.for_period(from_date=datetime(2025, 12, 1), to_date=datetime(2026, 1, 1))
 # sorted_occs = occ_qs.sort_by_next()
