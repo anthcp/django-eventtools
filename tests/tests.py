@@ -1,15 +1,15 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from dateutil import rrule
 from dateutil.relativedelta import relativedelta
 
 #import pytz
 from django.test import TestCase, override_settings
 #from django.utils.timezone import get_default_timezone, make_aware
-from django.utils import timezone
+#from django.utils import timezone
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from eventtools.models import REPEAT_MAX
-
+from zoneinfo import ZoneInfo
 from .models import MyEvent, MyOccurrence
 
 
@@ -487,10 +487,10 @@ class EventToolsTestCase(TestCase):
         )
 
         next_occ = occ.next_occurrence(
-            from_date=datetime(2017, 12, 26, 22, 49, tzinfo=timezone.UTC))
+            from_date=datetime(2017, 12, 26, 22, 49, tzinfo=timezone.utc))
         self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 28, 1, 0))
 
         next_occ = occ.next_occurrence(
-            from_date=datetime(2017, 12, 26, 12, 49, tzinfo=timezone.UTC))
+            from_date=datetime(2017, 12, 26, 12, 49, tzinfo=timezone.utc))
         self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 27, 1, 0))
 
