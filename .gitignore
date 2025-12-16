@@ -1,0 +1,42 @@
+# Python
+# Byte-compiled / optimized / legacy .pyc files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+*.egg-info/
+.eggs/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Django-specific additions
+# Database files (if using default sqlite)
+*.sqlite3
+db.sqlite3
+
+# Media/Uploads folder (often large files that should not be in git)
+media/
+
+# IDE/Editor Files
+# VS Code
+.vscode/settings.json
+.vscode/extensions.json
+.vscode/launch.json
+.vscode/tasks.json
+# ^ Keep the above if you want to share specific settings within the team, otherwise uncomment
+
+# Other IDEs
+.idea/  # PyCharm / IntelliJ
+*.swp   # Vim
+*~      # Emacs
+
+# OS-generated files
+.DS_Store # macOS
+Thumbs.db # Windows
