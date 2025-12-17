@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone as dj_timezone
-
+from django.db import models
 from .models import MyEvent, MyOccurrence
 
 

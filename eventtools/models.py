@@ -6,7 +6,6 @@ from django.utils import timezone as dj_timezone
 from dateutil.rrule import rrulestr, rruleset
 from dateutil.parser import isoparse  # prefer isoparse for ISO strings
 
-
 class OccurrenceQuerySet(models.QuerySet):
     def all_occurrences(self, from_date=None, to_date=None, count=None):
         if from_date is None:
@@ -47,7 +46,7 @@ class BaseEvent(models.Model):
 
 
 class BaseOccurrence(models.Model):
-    event = models.ForeignKey(BaseEvent, on_delete=models.CASCADE, related_name="occurrences")
+    #event = models.ForeignKey(BaseEvent, on_delete=models.CASCADE, related_name="occurrences")
     start = models.DateTimeField()
     end = models.DateTimeField(null=True, blank=True)
     rrule = models.TextField(blank=True, null=True)
@@ -141,3 +140,23 @@ class BaseOccurrence(models.Model):
             next_start = rset.after(next_start, inc=False)
 
         return occurrences
+
+# Test models inheriting from the base classes for tests.py    
+class MyEvent(BaseEvent):
+    title = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.title
+
+class MyOccurrence(BaseOccurrence):
+    event = models.ForeignKey(
+        MyEvent,
+        on_delete=models.CASCADE,
+        related_name="occurrences",
+    )
+
+class MyOtherOccurrence(BaseOccurrence):
+     event = models.ForeignKey(
+         MyEvent, 
+         on_delete=models.CASCADE
+    )
