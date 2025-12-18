@@ -29,6 +29,7 @@ class OccurrenceQuerySet(models.QuerySet):
 
 class BaseEvent(models.Model):
     name = models.CharField(max_length=255)
+    title = models.CharField(max_length=100)
 
     def __str__(self):
         return self.name
@@ -46,7 +47,7 @@ class BaseEvent(models.Model):
 
 
 class BaseOccurrence(models.Model):
-    #event = models.ForeignKey(BaseEvent, on_delete=models.CASCADE, related_name="occurrences")
+    event = models.ForeignKey(BaseEvent, on_delete=models.CASCADE, related_name="occurrences")
     start = models.DateTimeField()
     end = models.DateTimeField(null=True, blank=True)
     rrule = models.TextField(blank=True, null=True)
@@ -143,20 +144,22 @@ class BaseOccurrence(models.Model):
 
 # Test models inheriting from the base classes for tests.py    
 class MyEvent(BaseEvent):
-    title = models.CharField(max_length=100)
+    #title = models.CharField(max_length=100)
 
     def __str__(self):
         return self.title
 
 class MyOccurrence(BaseOccurrence):
-    event = models.ForeignKey(
-        MyEvent,
-        on_delete=models.CASCADE,
-        related_name="occurrences",
-    )
+    # event = models.ForeignKey(
+    #     MyEvent,
+    #     on_delete=models.CASCADE,
+    #     related_name="occurrences",
+    # )
+    pass
 
 class MyOtherOccurrence(BaseOccurrence):
-     event = models.ForeignKey(
-         MyEvent, 
-         on_delete=models.CASCADE
-    )
+    #  event = models.ForeignKey(
+    #      MyEvent, 
+    #      on_delete=models.CASCADE
+    # )
+    pass

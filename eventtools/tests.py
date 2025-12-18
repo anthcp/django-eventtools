@@ -2,9 +2,9 @@ import datetime
 from zoneinfo import ZoneInfo
 
 from django.test import TestCase
-from django.utils import timezone as dj_timezone
-from django.db import models
 from .models import MyEvent, MyOccurrence
+
+from django.conf import settings
 
 
 class RecurringEventsTZTests(TestCase):
@@ -26,13 +26,15 @@ class RecurringEventsTZTests(TestCase):
             end=self.aware(2025, 12, 16, 11, 0),
             timezone="UTC",
         )
+        print(f"\nCreated occurrence: {occ.start} to {occ.end}, tz={occ.timezone}")
         occ.save()
 
         occs = event.all_occurrences(
             from_date=self.aware(2025, 12, 1),
             to_date=self.aware(2026, 1, 1),
         )
-
+        print(f"Occurrences found: {len(occs)}")
+        
         self.assertEqual(len(occs), 1)
         start, end, occ_obj = occs[0]
 
