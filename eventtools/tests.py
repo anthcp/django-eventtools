@@ -17,14 +17,14 @@ class RecurringEventsTZTests(TestCase):
     #     return datetime.datetime(y, m, d, hh, mm, ss, tzinfo=tz)
 
     def test_one_off_occurrence(self):
-        event = MyEvent(name="One-off", title="One-off", timezone="UTC",)
+        timezone = "UTC"
+        event = MyEvent(name="One-off", title="One-off", timezone=timezone,)
         event.save()
 
         occ = MyOccurrence(
             event=event,
             start=(2025, 12, 16, 10, 0), # can use a tuple
             end=(2025, 12, 16, 11, 0),
-            #timezone="UTC",
         )
         print(f"\nCreated occurrence: {occ.start} to {occ.end}, tz={event.timezone}")
         occ.save()
