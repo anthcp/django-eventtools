@@ -26,7 +26,7 @@ class RecurringEventsTZTests(TestCase):
             end=(2025, 12, 16, 11, 0),
             #timezone="UTC",
         )
-        print(f"\nCreated occurrence: {occ.start} to {occ.end}, tz={occ.timezone}")
+        print(f"\nCreated occurrence: {occ.start} to {occ.end}, tz={event.timezone}")
         occ.save()
 
         occs = event.all_occurrences(
@@ -71,7 +71,8 @@ class RecurringEventsTZTests(TestCase):
             self.assertEqual(end - start, datetime.timedelta(hours=1))
 
     def test_next_and_first_occurrence(self):
-        event = MyEvent(name="Daily", title="Daily", timezone="UTC",)
+        timezone = "UTC"
+        event = MyEvent(name="Daily", title="Daily", timezone=timezone,)
         event.save()
 
         occ = MyOccurrence(
@@ -87,16 +88,16 @@ class RecurringEventsTZTests(TestCase):
         self.assertIsNotNone(first)
 
         first_start, first_end, _ = first
-        self.assertEqual(first_start, (2025, 12, 16, 10, 0))
+        self.assertEqual(first_start, datetime.datetime(2025, 12, 16, 10, 0, tzinfo=ZoneInfo(timezone)))
         self.assertEqual(first_end - first_start, datetime.timedelta(hours=1))
 
         nxt = event.next_occurrence(
-            from_date=self.aware(2025, 12, 18, 0, 0)
+            from_date=(2025, 12, 18, 0, 0)
         )
         self.assertIsNotNone(nxt)
 
         next_start, _, _ = nxt
-        self.assertEqual(next_start, self.aware(2025, 12, 18, 10, 0))
+        self.assertEqual(next_start,datetime.datetime(2025, 12, 18, 10, 0, tzinfo=ZoneInfo(timezone)))
 
     def test_exdates_excluded(self):
         event = MyEvent(name="Exclude", title="Exclude", timezone="UTC",)
@@ -123,7 +124,8 @@ class RecurringEventsTZTests(TestCase):
         self.assertNotIn((2025, 12, 23, 10, 0), starts)
 
     def test_rdates_included(self):
-        event = MyEvent(name="Include", title="Include", timezone="UTC",)
+        timezone = "UTC"
+        event = MyEvent(name="Include", title="Include", timezone=timezone ,)
         event.save()
 
         occ = MyOccurrence(
@@ -144,9 +146,9 @@ class RecurringEventsTZTests(TestCase):
         starts = [o[0] for o in occs]
 
         self.assertEqual(len(starts), 3)
-        self.assertIn((2025, 12, 16, 10, 0), starts)
-        self.assertIn((2025, 12, 20, 10, 0), starts)
-        self.assertIn((2025, 12, 23, 10, 0), starts)
+        self.assertIn(datetime.datetime(2025, 12, 16, 10, 0, tzinfo=ZoneInfo(timezone)), starts)
+        self.assertIn(datetime.datetime(2025, 12, 20, 10, 0, tzinfo=ZoneInfo(timezone)), starts)
+        self.assertIn(datetime.datetime(2025, 12, 23, 10, 0, tzinfo=ZoneInfo(timezone)), starts)
 
     # def test_dst_wall_time_stability(self):
     #     """
