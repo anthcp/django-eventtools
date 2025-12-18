@@ -17,14 +17,14 @@ class RecurringEventsTZTests(TestCase):
     #     return datetime.datetime(y, m, d, hh, mm, ss, tzinfo=tz)
 
     def test_one_off_occurrence(self):
-        event = MyEvent(name="One-off", title="One-off")
+        event = MyEvent(name="One-off", title="One-off", timezone="UTC",)
         event.save()
 
         occ = MyOccurrence(
             event=event,
             start=(2025, 12, 16, 10, 0), # can use a tuple
             end=(2025, 12, 16, 11, 0),
-            timezone="UTC",
+            #timezone="UTC",
         )
         print(f"\nCreated occurrence: {occ.start} to {occ.end}, tz={occ.timezone}")
         occ.save()
@@ -44,7 +44,7 @@ class RecurringEventsTZTests(TestCase):
         self.assertIsNotNone(start.tzinfo)
 
     def test_weekly_recurrence_count(self):
-        event = MyEvent(name="Weekly", title="Weekly")
+        event = MyEvent(name="Weekly", title="Weekly", timezone="UTC",)
         event.save()
 
         occ = MyOccurrence(
@@ -52,7 +52,7 @@ class RecurringEventsTZTests(TestCase):
             start=(2025, 12, 16, 10, 0),
             end=(2025, 12, 16, 11, 0),
             rrule="RRULE:FREQ=WEEKLY;COUNT=3",
-            timezone="UTC",
+            #timezone="UTC",
         )
         occ.save()
 
@@ -71,7 +71,7 @@ class RecurringEventsTZTests(TestCase):
             self.assertEqual(end - start, datetime.timedelta(hours=1))
 
     def test_next_and_first_occurrence(self):
-        event = MyEvent(name="Daily", title="Daily")
+        event = MyEvent(name="Daily", title="Daily", timezone="UTC",)
         event.save()
 
         occ = MyOccurrence(
@@ -79,7 +79,7 @@ class RecurringEventsTZTests(TestCase):
             start=(2025, 12, 16, 10, 0),
             end=(2025, 12, 16, 11, 0),
             rrule="RRULE:FREQ=DAILY;COUNT=5",
-            timezone="UTC",
+            #timezone="UTC",
         )
         occ.save()
 
@@ -99,7 +99,7 @@ class RecurringEventsTZTests(TestCase):
         self.assertEqual(next_start, self.aware(2025, 12, 18, 10, 0))
 
     def test_exdates_excluded(self):
-        event = MyEvent(name="Exclude", title="Exclude")
+        event = MyEvent(name="Exclude", title="Exclude", timezone="UTC",)
         event.save()
 
         occ = MyOccurrence(
@@ -107,7 +107,7 @@ class RecurringEventsTZTests(TestCase):
             start=(2025, 12, 16, 10, 0),
             end=(2025, 12, 16, 11, 0),
             rrule="RRULE:FREQ=WEEKLY;COUNT=3",
-            timezone="UTC",
+            #timezone="UTC",
             exdates_json=["2025-12-23T10:00:00+00:00"],
         )
         occ.save()
@@ -123,7 +123,7 @@ class RecurringEventsTZTests(TestCase):
         self.assertNotIn(self.aware(2025, 12, 23, 10, 0), starts)
 
     def test_rdates_included(self):
-        event = MyEvent(name="Include", title="Include")
+        event = MyEvent(name="Include", title="Include", timezone="UTC",)
         event.save()
 
         occ = MyOccurrence(
@@ -131,22 +131,22 @@ class RecurringEventsTZTests(TestCase):
             start=(2025, 12, 16, 10, 0),
             end=(2025, 12, 16, 11, 0),
             rrule="RRULE:FREQ=WEEKLY;COUNT=2",
-            timezone="UTC",
+            #timezone="UTC",
             rdates_json=["2025-12-20T10:00:00+00:00"],
         )
         occ.save()
 
         occs = event.all_occurrences(
-            from_date=self.aware(2025, 12, 1),
-            to_date=self.aware(2026, 1, 10),
+            from_date=(2025, 12, 1),
+            to_date=(2026, 1, 10),
         )
 
         starts = [o[0] for o in occs]
 
         self.assertEqual(len(starts), 3)
-        self.assertIn(self.aware(2025, 12, 16, 10, 0), starts)
-        self.assertIn(self.aware(2025, 12, 20, 10, 0), starts)
-        self.assertIn(self.aware(2025, 12, 23, 10, 0), starts)
+        self.assertIn((2025, 12, 16, 10, 0), starts)
+        self.assertIn((2025, 12, 20, 10, 0), starts)
+        self.assertIn((2025, 12, 23, 10, 0), starts)
 
     # def test_dst_wall_time_stability(self):
     #     """
@@ -155,10 +155,10 @@ class RecurringEventsTZTests(TestCase):
     #     event = MyEvent(name="DST", title="DST")
     #     event
     def test_save_localizes_naive_start_end(self):
-        event = MyEvent.objects.create(name="T", title="T")
+        event = MyEvent.objects.create(name="T", title="T", timezone="America/New_York",)
         occ = MyOccurrence(
             event=event,
-            timezone="America/New_York",
+            #timezone="America/New_York",
             start=(2025, 12, 16, 10, 0, 0),  # naive
             end=(2025, 12, 16, 11, 0, 0),    # naive
         )

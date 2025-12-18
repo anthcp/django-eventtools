@@ -93,23 +93,29 @@ class tzDateFactory:
 
 class OccurrenceQuerySet(models.QuerySet):
 
-    def all_occurrences(self, from_date=None, to_date=None, count=None):
+    def tzDateConv(self, event_tz):
+        return tzDateFactory(event_tz)
+
+    def all_occurrences(self, from_date=None, to_date=None, count=None, event_tz=None):
         # Default: use an aware datetime
         if from_date is None:
             #from_date = pendulum.now("UTC")
             from_date = pendulum.instance(dj_timezone.now())
         else:    
-            from_date = self._aware(from_date)
+            from_date = self.tzDateConv(event_tz).aware(from_date)
 
         # Enforce awareness
         if dj_timezone.is_naive(from_date):
             raise ValueError("from_date must be timezone-aware")
-        if to_date is not None and dj_timezone.is_naive(to_date):
-            raise ValueError("to_date must be timezone-aware")
+        # if to_date is not None and dj_timezone.is_naive(to_date):
+        #     raise ValueError("to_date must be timezone-aware")
+        if to_date is not None:
+            to_date = self.tzDateConv(event_tz).aware(to_date)
+        #     raise ValueError("to_date must be timezone-aware")
 
         # Normalize to Pendulum objects (helps consistent tz handling)
-        from_date = pendulum.instance(from_date)
-        to_date = pendulum.instance(to_date) if to_date is not None else None
+        # from_date = pendulum.instance(from_date)
+        # to_date = pendulum.instance(to_date) if to_date is not None else None
 
         all_occs = []
 
@@ -139,12 +145,13 @@ class OccurrenceQuerySet(models.QuerySet):
 class BaseEvent(models.Model):
     name = models.CharField(max_length=255)
     title = models.CharField(max_length=100)
+    timezone = models.CharField(max_length=63, default="UTC")
 
     def __str__(self):
         return self.name
 
     def all_occurrences(self, from_date=None, to_date=None, count=None):
-        return self.occurrences.all_occurrences(from_date, to_date, count)
+        return self.occurrences.all_occurrences(from_date, to_date, count, event_tz=self.timezone )
 
     def next_occurrence(self, from_date=None):
         occs = self.all_occurrences(from_date=from_date, count=1)
@@ -160,15 +167,15 @@ class BaseOccurrence(models.Model):
     start = models.DateTimeField()
     end = models.DateTimeField(null=True, blank=True)
     rrule = models.TextField(blank=True, null=True)
-    timezone = models.CharField(max_length=63, default="UTC")
+    #timezone = models.CharField(max_length=63, default="UTC")
     exdates_json = models.JSONField(default=list, blank=True)
     rdates_json = models.JSONField(default=list, blank=True)
 
     objects = OccurrenceQuerySet.as_manager()
-    
+
     @property
     def tzDateConv(self):
-        return tzDateFactory(self.timezone)
+        return tzDateFactory(self.event.timezone)
 
     def __str__(self):
         return f"{self.event.name} occurrence starting {self.start}"
@@ -265,8 +272,8 @@ class BaseOccurrence(models.Model):
                 raise ValueError("to_date must be timezone-aware")
             to_local = to_date.astimezone(tz)
 
-        start_local = self._aware(self.start)
-        end_local = self._aware(self.end) if self.end else None
+        start_local = self.tzDateConv.aware(self.start)
+        end_local = self.tzDateConv.aware(self.end) if self.end else None
         duration = (end_local - start_local) if end_local else datetime.timedelta(0)
 
         exdates = set(self.parse_dates(self.exdates_json))
