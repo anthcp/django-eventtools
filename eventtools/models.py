@@ -71,26 +71,6 @@ class tzDateFactory:
         return
 
 
-# class OccurrenceQuerySet(models.QuerySet):
-#     def all_occurrences(self, from_date=None, to_date=None, count=None):
-#         if from_date is None:
-#             from_date = dj_timezone.now()
-#         if dj_timezone.is_naive(from_date):
-#             raise ValueError("from_date must be timezone-aware")
-
-#         if to_date is not None and dj_timezone.is_naive(to_date):
-#             raise ValueError("to_date must be timezone-aware")
-
-#         all_occs = []
-#         for occ in self:
-#             all_occs.extend(occ.generate_occurrences(from_date, to_date, count))
-#         all_occs.sort(key=lambda x: x[0])
-
-#         if count:
-#             all_occs = all_occs[:count]
-
-#         return all_occs
-
 class OccurrenceQuerySet(models.QuerySet):
 
     def tzDateConv(self, event_tz):
@@ -112,10 +92,6 @@ class OccurrenceQuerySet(models.QuerySet):
         if to_date is not None:
             to_date = self.tzDateConv(event_tz).aware(to_date)
         #     raise ValueError("to_date must be timezone-aware")
-
-        # Normalize to Pendulum objects (helps consistent tz handling)
-        # from_date = pendulum.instance(from_date)
-        # to_date = pendulum.instance(to_date) if to_date is not None else None
 
         all_occs = []
 
@@ -180,50 +156,6 @@ class BaseOccurrence(models.Model):
     def __str__(self):
         return f"{self.event.name} occurrence starting {self.start}"
 
-    # def _get_tz(self):
-    #     """
-    #     Return a valid Pendulum timezone or raise ValidationError.
-    #     """
-    #     try:
-    #         return pendulum.timezone(self.timezone)
-    #     except Exception:
-    #         raise ValidationError(
-    #             {"timezone": f"Invalid timezone: {self.timezone}"}
-    #         )
-    
-    # @singledispatchmethod
-    # def _aware(self, arg):
-    #     raise TypeError("_aware Unsupported type")
-
-    # @_aware.register
-    # def _(self, dt: datetime.datetime):
-    #     tz = self._get_tz()
-
-    #     # If naive: interpret as local time in self.timezone
-    #     if dt.tzinfo is None:
-    #         return pendulum.datetime(
-    #             dt.year, dt.month, dt.day,
-    #             dt.hour, dt.minute, dt.second,
-    #             dt.microsecond,
-    #             tz=tz,
-    #         )
-    #     # If aware: convert into self.timezone
-    #     return pendulum.instance(dt).in_timezone(tz)
-
-    # @_aware.register
-    # def _(self, arg: tuple):
-    #     y, m, d, *rest = arg
-    #     hh, mm, ss = (rest + [0, 0, 0])[:3]
-    #     tz = self._get_tz()  # already validates timezone
-    #     try:
-    #         return pendulum.datetime(y, m, d, hh, mm, ss, tz=tz)
-    #     except Exception as exc:
-    #         raise ValidationError(
-    #             f"Invalid datetime components: "
-    #             f"{y=}, {m=}, {d=}, {hh=}, {mm=}, {ss=} ({exc})"
-    #         ) from exc
-    #     return
-
 
     def save(self, *args, **kwargs):
         if self.start:
@@ -232,15 +164,7 @@ class BaseOccurrence(models.Model):
             self.end = self.tzDateConv.aware(self.end)
         super().save(*args, **kwargs)
 
-    # def parse_dates(self, dates_json):
-    #     tz = self._get_tz()
-    #     parsed = []
-    #     for d_str in dates_json:
-    #         d = isoparse(d_str)  # strict ISO
-    #         if dj_timezone.is_naive(d):
-    #             d = dj_timezone.make_aware(d, tz)
-    #         parsed.append(d.astimezone(tz))
-    #     return parsed
+
     def parse_dates(self, dates_json):
         tz = self.tzDateConv.get_tz()
         parsed = []
@@ -308,10 +232,43 @@ class BaseOccurrence(models.Model):
             next_start = rset.after(next_start, inc=False)
 
         return occurrences
+    
 
+    def clean(self):
+        # 1) Validate timezone (raises ValidationError if invalid)
+        tz = self.tzDateConv.get_tz()
 
+        # 2) Normalize start/end using your factory (same logic as save)
+        if self.start:
+            self.start = self.tzDateConv.aware(self.start)
+        if self.end:
+            self.end = self.tzDateConv.aware(self.end)
 
+        # 3) Core validations (same as old behavior)
+        if self.start and self.end and self.start >= self.end:
+            raise ValidationError("End must be after start")
 
+        # 4) Validate RRULE string early (nice admin UX)
+        if self.rrule:
+            try:
+                # dtstart must be in the correct timezone
+                start_local = self.tzDateConv.aware(self.start)
+                rrulestr(self.rrule, dtstart=start_local)
+            except Exception as exc:
+                raise ValidationError({"rrule": f"Invalid RRULE: {exc}"}) from exc
+
+        # 5) Optional: validate exdates/rdates ISO parsing early
+        # (ensures bad strings are caught before save/generate)
+        try:
+            self.parse_dates(self.exdates_json)
+        except Exception as exc:
+            raise ValidationError({"exdates_json": f"Invalid EXDATE value: {exc}"}) from exc
+
+        try:
+            self.parse_dates(self.rdates_json)
+        except Exception as exc:
+            raise ValidationError({"rdates_json": f"Invalid RDATE value: {exc}"}) from exccv
+        return
 
 # Test models inheriting from the base classes for tests.py    
 class MyEvent(BaseEvent):
