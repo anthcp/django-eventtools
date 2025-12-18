@@ -87,7 +87,7 @@ class RecurringEventsTZTests(TestCase):
         self.assertIsNotNone(first)
 
         first_start, first_end, _ = first
-        self.assertEqual(first_start, self.aware(2025, 12, 16, 10, 0))
+        self.assertEqual(first_start, (2025, 12, 16, 10, 0))
         self.assertEqual(first_end - first_start, datetime.timedelta(hours=1))
 
         nxt = event.next_occurrence(
@@ -120,7 +120,7 @@ class RecurringEventsTZTests(TestCase):
         starts = [o[0] for o in occs]
 
         self.assertEqual(len(starts), 2)
-        self.assertNotIn(self.aware(2025, 12, 23, 10, 0), starts)
+        self.assertNotIn((2025, 12, 23, 10, 0), starts)
 
     def test_rdates_included(self):
         event = MyEvent(name="Include", title="Include", timezone="UTC",)
