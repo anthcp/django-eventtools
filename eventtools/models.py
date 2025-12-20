@@ -11,7 +11,7 @@ from pendulum.tz.timezone import Timezone
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-#from .utils import tzDateFactory
+
 from .event import BaseEvent
 
 
@@ -23,7 +23,6 @@ REPEAT_CHOICES = getattr(settings, 'EVENTTOOLS_REPEAT_CHOICES', (
     ("RRULE:FREQ=YEARLY", 'Yearly'),
 ))
 REPEAT_MAX = 200
-
 
 class ChoiceTextField(models.TextField):
     """Textfield which uses a Select widget if it has choices specified. """
