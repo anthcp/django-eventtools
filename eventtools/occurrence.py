@@ -42,7 +42,8 @@ class BaseOccurrence(models.Model):
     exdates_json = models.JSONField(default=list, blank=True)
     rdates_json = models.JSONField(default=list, blank=True)
     repeat_until = models.DateField(null=True, blank=True, verbose_name=_('repeat_until'))
-
+    _is_occurrence = True  # Marker attribute
+    
     repeat = ChoiceTextField(
         choices=REPEAT_CHOICES, default='', blank=True,
         verbose_name=_('repeat'))

@@ -238,15 +238,14 @@ class RecurringEventsTZTests(TestCase):
                 start=datetime.datetime(2016, 1, 1, 7, 0),
                 repeat="RRULE:FREQ=MONTHLY",
                 repeat_until=datetime.datetime(2015, 12, 31),
-            ).clean()
+             ).clean()
 
     # def test_single_occurrence(self):
     #     timezone = "UTC"
     #     occ = self.christmas.get_related_occurrences().get()
-    #     # using date() arguments
     #     dates = list(occ.all_occurrences(
-    #         from_date=date(2015, 12, 1),
-    #         to_date=date(2015, 12, 31),))
+    #         from_date=(2015, 12, 1),
+    #         to_date=(2015, 12, 31),))
     #     self.assertEqual(len(dates), 1)
 
     #     # check it works as expected when from/to equal the occurrence date
