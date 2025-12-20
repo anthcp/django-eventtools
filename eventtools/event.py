@@ -2,8 +2,21 @@ import datetime
 from django.db import models
 from django.utils import timezone as dj_timezone
 
+from.query import EventQuerySet, OccurrenceMixin
 
-class BaseEvent(models.Model):
+
+class BaseModel(models.Model, OccurrenceMixin):
+    """Abstract model providing common occurrence-related functionality. """
+
+    class Meta:
+        abstract = True
+
+
+class EventManager(models.Manager.from_queryset(EventQuerySet)):
+    use_for_related_fields = True
+
+
+class BaseEvent(BaseModel):
     name = models.CharField(max_length=255)
     title = models.CharField(max_length=100)
     timezone = models.CharField(max_length=63, default="UTC")

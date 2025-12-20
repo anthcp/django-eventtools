@@ -2,6 +2,7 @@ from dateutil import rrule
 from datetime import date, datetime, timedelta
 from django.core.exceptions import ValidationError
 from django.utils.timezone import make_aware, is_naive, make_naive, is_aware
+from django.db.models import Q, Case, When, Value
 from django.conf import settings
 
 import pendulum
@@ -118,3 +119,69 @@ def as_datetime(d, end=False):
         return default_aware(new_value)
     # otherwise assume it's a datetime
     return default_aware(d)
+
+# start of occurrence related functions
+
+def combine_occurrences(generators, limit):
+    """Merge the occurrences in two or more generators, in date order.
+
+       Returns a generator. """
+
+    count = 0
+    grouped = []
+    for gen in generators:
+        try:
+            next_date = next(gen)
+        except StopIteration:
+            pass
+        else:
+            grouped.append({'generator': gen, 'next': next_date})
+
+    while limit is None or count < limit:
+        # all generators must have finished if there are no groups
+        if not len(grouped):
+            return
+
+        # work out which generator will yield the earliest date (based on
+        # start - end is ignored)
+        next_group = None
+        for group in grouped:
+            if not next_group or group['next'][0] < next_group['next'][0]:
+                next_group = group
+
+        # yield the next (start, end) pair, with occurrence data
+        yield next_group['next']
+        count += 1
+
+        # update the group's next item, so we don't keep yielding the same date
+        try:
+            next_group['next'] = next(next_group['generator'])
+        except StopIteration:
+            # remove the group if there's none left
+            grouped.remove(next_group)
+
+
+def filter_invalid(approx_qs, from_date, to_date):
+    """Filter out any results from the queryset which do not have an occurrence
+       within the given range. """
+
+    # work out what to exclude based on occurrences
+    exclude_pks = []
+    for obj in approx_qs:
+        if not obj.next_occurrence(from_date=from_date, to_date=to_date):
+            exclude_pks.append(obj.pk)
+
+    # and then apply the filtering to the queryset itself
+    return approx_qs.exclude(pk__in=exclude_pks)
+
+
+def filter_from(qs, from_date, q_func=Q):
+    """Filter a queryset by from_date. May still contain false positives due to
+       uncertainty with repetitions. """
+
+    from_date = as_datetime(from_date)
+    return qs.filter(
+        q_func(end__isnull=False, end__gte=from_date) |
+        q_func(start__gte=from_date) |
+        (~q_func(repeat='') & (q_func(repeat_until__gte=from_date) |
+         q_func(repeat_until__isnull=True)))).distinct()

@@ -1,3 +1,4 @@
+import datetime
 from django.db import models
 from django.utils import timezone as dj_timezone
 from django.db.models import Q, Case, When, Value
@@ -5,12 +6,32 @@ from django.core.exceptions import ValidationError
 from dateutil.parser import isoparse  # prefer isoparse for ISO strings
 from django.utils.translation import gettext_lazy as _
 from dateutil.rrule import rrulestr, rruleset
+from django.conf import settings
+from dateutil import rrule
 
 import pendulum
 from .utils import as_datetime, tzDateFactory
-from .models import ChoiceTextField, REPEAT_CHOICES
+#from .models import REPEAT_CHOICES
 from .event import BaseEvent
 from .query import OccurrenceQuerySet
+
+# set EVENTTOOLS_REPEAT_CHOICES = None to make this a plain textfield
+REPEAT_CHOICES = getattr(settings, 'EVENTTOOLS_REPEAT_CHOICES', (
+    ("RRULE:FREQ=DAILY", 'Daily'),
+    ("RRULE:FREQ=WEEKLY", 'Weekly'),
+    ("RRULE:FREQ=MONTHLY", 'Monthly'),
+    ("RRULE:FREQ=YEARLY", 'Yearly'),
+))
+REPEAT_MAX = 200
+
+class ChoiceTextField(models.TextField):
+    """Textfield which uses a Select widget if it has choices specified. """
+    def formfield(self, **kwargs):
+        if self.choices:
+            # this overrides the TextField's preference for a Textarea widget,
+            # allowing the ModelForm to decide which field to use
+            kwargs['widget'] = None
+        return super(ChoiceTextField, self).formfield(**kwargs)
 
 class BaseOccurrence(models.Model):
     event = models.ForeignKey(BaseEvent, on_delete=models.CASCADE, related_name="occurrences")
@@ -166,68 +187,18 @@ class BaseOccurrence(models.Model):
         
         return
 
-# start of occurrence related functions
+class OccurrenceManager(models.Manager.from_queryset(OccurrenceQuerySet)):
+    use_for_related_fields = True
 
-def combine_occurrences(generators, limit):
-    """Merge the occurrences in two or more generators, in date order.
-
-       Returns a generator. """
-
-    count = 0
-    grouped = []
-    for gen in generators:
-        try:
-            next_date = next(gen)
-        except StopIteration:
-            pass
-        else:
-            grouped.append({'generator': gen, 'next': next_date})
-
-    while limit is None or count < limit:
-        # all generators must have finished if there are no groups
-        if not len(grouped):
-            return
-
-        # work out which generator will yield the earliest date (based on
-        # start - end is ignored)
-        next_group = None
-        for group in grouped:
-            if not next_group or group['next'][0] < next_group['next'][0]:
-                next_group = group
-
-        # yield the next (start, end) pair, with occurrence data
-        yield next_group['next']
-        count += 1
-
-        # update the group's next item, so we don't keep yielding the same date
-        try:
-            next_group['next'] = next(next_group['generator'])
-        except StopIteration:
-            # remove the group if there's none left
-            grouped.remove(next_group)
-
-
-def filter_invalid(approx_qs, from_date, to_date):
-    """Filter out any results from the queryset which do not have an occurrence
-       within the given range. """
-
-    # work out what to exclude based on occurrences
-    exclude_pks = []
-    for obj in approx_qs:
-        if not obj.next_occurrence(from_date=from_date, to_date=to_date):
-            exclude_pks.append(obj.pk)
-
-    # and then apply the filtering to the queryset itself
-    return approx_qs.exclude(pk__in=exclude_pks)
-
-
-def filter_from(qs, from_date, q_func=Q):
-    """Filter a queryset by from_date. May still contain false positives due to
-       uncertainty with repetitions. """
-
-    from_date = as_datetime(from_date)
-    return qs.filter(
-        q_func(end__isnull=False, end__gte=from_date) |
-        q_func(start__gte=from_date) |
-        (~q_func(repeat='') & (q_func(repeat_until__gte=from_date) |
-         q_func(repeat_until__isnull=True)))).distinct()
+    def migrate_integer_repeat(self):
+        self.update(repeat=Case(
+            When(repeat=rrule.YEARLY,
+                 then=Value("RRULE:FREQ=YEARLY")),
+            When(repeat=rrule.MONTHLY,
+                 then=Value("RRULE:FREQ=MONTHLY")),
+            When(repeat=rrule.WEEKLY,
+                 then=Value("RRULE:FREQ=WEEKLY")),
+            When(repeat=rrule.DAILY,
+                 then=Value("RRULE:FREQ=DAILY")),
+            default=Value(""),
+        ))

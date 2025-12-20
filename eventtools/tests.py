@@ -5,8 +5,7 @@ from django.test import TestCase
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from .models import BaseEvent
-from .occurrence import BaseOccurrence
+from .models import BaseEvent, BaseOccurrence
 
 class RecurringEventsTZTests(TestCase):
     def setUp(self):
