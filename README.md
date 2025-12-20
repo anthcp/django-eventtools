@@ -7,7 +7,12 @@ python manage.py makemigrations eventtools
 python manage.py migrate
 python manage.py test
 ```
-
+```
+rm db.sqlite3
+rm -rf eventtools/migrations/0*.py
+python manage.py makemigrations
+python manage.py migrate
+```
 
 ## Installation
 
