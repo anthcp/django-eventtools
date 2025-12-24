@@ -1,0 +1,3 @@
+[submodule "tzEvent"]
+	path = tzEvent
+	url = https://github.com/anthcp/tzEvent.git
