@@ -1,0 +1,70 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.intcheck
+*.ipa
+*.dSYM;
+.pytest_cache/
+
+# Distribution / packaging
+.Python
+env/
+venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib
+lib64
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.whl
+*.pydevproject
+.project
+.pybuilder/
+target/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pylint.d/
+
+# IDEs and editors
+# VS Code
+.vscode/
+# PyCharm
+.idea/
+# Spyder (Python IDE)
+.spyderproject
+.spyproject
+# Others
+*~
+*.swp
+.DS_Store
+.venv/
+
+# Environment files
+.env
+.flaskenv
+
+# Miscellaneous
+*.log
+migrations/ # Generally migrations should be tracked, but this is a common exclusion in some specific setups.
+*.pyc/
