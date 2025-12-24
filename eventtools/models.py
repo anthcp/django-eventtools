@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from six import python_2_unicode_compatible
-
+from .tz_context import event_context_for
 
 # set EVENTTOOLS_REPEAT_CHOICES = None to make this a plain textfield
 REPEAT_CHOICES = getattr(settings, 'EVENTTOOLS_REPEAT_CHOICES', (
@@ -255,8 +255,19 @@ class EventManager(models.Manager.from_queryset(EventQuerySet)):
 
 class BaseEvent(BaseModel):
     """Abstract model providing occurrence-related methods for events.
-
        Subclasses should have a related BaseOccurrence subclass. """
+       
+    timezone = models.CharField(
+        max_length=64,
+        default=settings.TIME_ZONE,   # ← DEFAULT FROM DJANGO SETTINGS
+    )   
+
+    @property
+    def EventTz(self):
+        """
+        Returns the Event context class bound to this event's timezone.
+        """
+        return event_context_for(self.timezone)
 
     objects = EventManager()
 
