@@ -400,19 +400,24 @@ class BaseOccurrence(BaseModel):
     # -------------------- Event context plumbing --------------------
 
     def _get_event(self):
-        """
-        Return the related BaseEvent instance regardless of FK field name.
-        If the FK is unset, return None.
-        """
+    # Fast path: most subclasses have FK named 'event'
+        if hasattr(self, "event_id"):
+            if self.event_id is None:
+                return None
+            try:
+                return self.event
+            except Exception:
+                return None
+
+        # Generic fallback: scan any FK to BaseEvent
         for f in self._meta.fields:
             if isinstance(f, models.ForeignKey) and issubclass(f.related_model, BaseEvent):
+                fk_id = getattr(self, f"{f.name}_id", None)
+                if fk_id is None:
+                    return None
                 try:
                     return getattr(self, f.name)
-                except f.related_model.DoesNotExist:
-                    # FK relation exists but is not set on this row
-                    return None
                 except Exception:
-                    # Very defensive: avoid breaking occurrence generation
                     return None
         return None
 
@@ -425,6 +430,24 @@ class BaseOccurrence(BaseModel):
         if ev is not None:
             return ev.EventTz
         return event_context_for(settings.TIME_ZONE)
+    
+    @property
+    def start_event(self):
+        """
+        Start as an Event context DateTime (wrapped to the event/settings timezone).
+        """
+        if not self.start:
+            return None
+        return self._event_ctx().from_any_datetime(self.start)
+
+    @property
+    def end_event(self):
+        """
+        End as an Event context DateTime (wrapped). If end is missing, returns None.
+        """
+        if not self.end:
+            return None
+        return self._event_ctx().from_any_datetime(self.end)
     
  # -------------------- occurrence generation --------------------
  

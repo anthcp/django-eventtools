@@ -1,7 +1,8 @@
 from datetime import datetime, date, timedelta
 from dateutil import rrule
 from dateutil.relativedelta import relativedelta
-
+import pendulum
+import datetime as dt
 #import pytz
 from django.test import TestCase, override_settings
 #from django.utils.timezone import get_default_timezone, make_aware
@@ -10,6 +11,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from eventtools.models import REPEAT_MAX
 
+from tzEvent.event import Event
 from .models import MyEvent, MyOccurrence
 
 
@@ -485,12 +487,81 @@ class EventToolsTestCase(TestCase):
             start=timezone.make_aware(datetime(2017, 12, 24, 1), sg_tz),
             repeat='RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1'
         )
-
         next_occ = occ.next_occurrence(
             from_date=datetime(2017, 12, 26, 22, 49, tzinfo=timezone.UTC))
         self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 28, 1, 0))
-
         next_occ = occ.next_occurrence(
             from_date=datetime(2017, 12, 26, 12, 49, tzinfo=timezone.UTC))
         self.assertEqual(next_occ[0].timetuple()[:5], (2017, 12, 27, 1, 0))
+
+    @override_settings(USE_TZ=True, TIME_ZONE="Asia/Singapore")
+    def test_sg_timezone_wrapped_outputs(self):
+        sg_tz = timezone.get_current_timezone()
+
+        occ = MyOccurrence(
+            start=timezone.make_aware(datetime(2017, 12, 24, 1), sg_tz),
+            repeat="RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1",
+        )
+        # Case 1
+        start, end, occ_obj= occ.next_occurrence(
+            from_date=datetime(2017, 12, 26, 22, 49, tzinfo=timezone.UTC)
+        )
+        # start/end are wrapped Event instances
+        self.assertIsInstance(start, Event)
+        self.assertIsInstance(end, Event)
+        # timezone comes from settings fallback
+        self.assertEqual(start.timezone_name, "Asia/Singapore")
+        self.assertEqual(end.timezone_name, "Asia/Singapore")
+        # occurrence model exposes Event-wrapped views as well
+        self.assertEqual(occ_obj.start_event.timezone_name, "Asia/Singapore")
+        # original wall-clock expectation
+        self.assertEqual(start.timetuple()[:5], (2017, 12, 28, 1, 0))
+        # Case 2
+        start, end, occ_obj = occ.next_occurrence(
+            from_date=datetime(2017, 12, 26, 12, 49, tzinfo=timezone.UTC)
+        )
+        self.assertIsInstance(start, Event)
+        self.assertIsInstance(end, Event)
+        # timezone comes from settings fallback
+        self.assertEqual(start.timezone_name, "Asia/Singapore")
+        self.assertEqual(end.timezone_name, "Asia/Singapore")
+        # occurrence model exposes Event-wrapped views as well
+        self.assertEqual(occ_obj.start_event.timezone_name, "Asia/Singapore")
+        # original wall-clock expectation
+        self.assertEqual(start.timetuple()[:5], (2017, 12, 27, 1, 0))
+
+
+    @override_settings(USE_TZ=True, TIME_ZONE="UTC")
+    def test_calendar_view_can_convert_event_timezone(self):
+        def _to_py_datetime(x):
+            return dt.datetime(
+            x.year, x.month, x.day,
+            x.hour, x.minute, x.second, x.microsecond,
+            tzinfo=x.tzinfo,
+            )
+            
+        ev = MyEvent.objects.create(title="Meeting", timezone="Europe/London")
+        London = Event.create_context("Europe/London")
+        NewYork = Event.create_context("America/New_York")
+        start_london = London.datetime(2025, 6, 1, 14, 0)
+        end_london = start_london.add(hours=1)
+        occ = MyOccurrence.objects.create(
+            event=ev,
+            start=_to_py_datetime(start_london),
+            end=_to_py_datetime(end_london),
+        )
+        start, end, _ = next(occ.all_occurrences())
+        # Returned in event timezone (London)
+        self.assertEqual(start.timezone_name, "Europe/London")
+        self.assertEqual((start.year, start.month, start.day, start.hour, start.minute), (2025, 6, 1, 14, 0))
+        # Calendar converts to New York for display
+        start_ny = start.convert(NewYork)
+        end_ny = end.convert(NewYork)
+        # Same instant, different wall clock time
+        self.assertEqual(start, start_ny)
+        self.assertEqual(end, end_ny)
+        self.assertEqual(start_ny.timezone_name, "America/New_York")
+        # 14:00 London on 2025-06-01 is 09:00 in New York (DST)
+        self.assertEqual((start_ny.year, start_ny.month, start_ny.day, start_ny.hour, start_ny.minute), (2025, 6, 1, 9, 0))
+        self.assertEqual((end_ny.hour, end_ny.minute), (10, 0))
 
