@@ -396,7 +396,38 @@ class BaseOccurrence(BaseModel):
             raise ValidationError(msg)
 
     objects = OccurrenceManager()
+    
+    # -------------------- Event context plumbing --------------------
 
+    def _get_event(self):
+        """
+        Return the related BaseEvent instance regardless of FK field name.
+        If the FK is unset, return None.
+        """
+        for f in self._meta.fields:
+            if isinstance(f, models.ForeignKey) and issubclass(f.related_model, BaseEvent):
+                try:
+                    return getattr(self, f.name)
+                except f.related_model.DoesNotExist:
+                    # FK relation exists but is not set on this row
+                    return None
+                except Exception:
+                    # Very defensive: avoid breaking occurrence generation
+                    return None
+        return None
+
+    def _event_ctx(self):
+        """
+        Return the Event context class for this occurrence's event timezone.
+        Falls back to settings.TIME_ZONE if no related event is found.
+        """
+        ev = self._get_event()
+        if ev is not None:
+            return ev.EventTz
+        return event_context_for(settings.TIME_ZONE)
+    
+ # -------------------- occurrence generation --------------------
+ 
     def all_occurrences(self, from_date=None, to_date=None, limit=REPEAT_MAX):
         """Return a generator yielding a (start, end) tuple for all dates
            for this occurrence, taking repetition into account. """
@@ -407,11 +438,14 @@ class BaseOccurrence(BaseModel):
         from_date = from_date and as_datetime(from_date)
         to_date = to_date and as_datetime(to_date, True)
 
+        ctx = self._event_ctx() # New event bits
+        wrap = lambda dt: ctx.from_any_datetime(dt) if dt else None
+        
         if not self.repeat:
             if (not from_date or self.start >= from_date or
                 (self.end and self.end >= from_date)) and \
                (not to_date or self.start <= to_date):
-                yield (self.start, self.end, self.occurrence_data)
+                yield (wrap(self.start), wrap(self.end), self.occurrence_data)
         else:
             delta = (self.end - self.start) if self.end else timedelta(0)
             repeater = self.get_repeater()
@@ -444,11 +478,10 @@ class BaseOccurrence(BaseModel):
 
                 # make naive results aware
                 occ_start = default_aware(occ_start)
-                yield (occ_start, occ_start + delta, self.occurrence_data)
+                yield (wrap(occ_start), wrap(occ_start) + delta, self.occurrence_data)
 
     def get_repeater(self):
         """Get rruleset instance representing this occurrence's repetitions.
-
         Subclasses may override this method for custom repeat behaviour.
         """
 
