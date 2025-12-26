@@ -1,37 +1,46 @@
 Metadata-Version: 2.4
 Name: django-eventtools
-Version: 1.0.3
-Summary: Recurring event tools for django
-Home-page: https://github.com/gregplaysguitar/django-eventtools
-Author: Greg Brown
-Author-email: greg@gregbrown.co.nz
+Version: 1.1.0
+Summary: Recurring event tools for Django
+Home-page: https://github.com/anthcp/django-eventtools
+Author: Anthony Percy
+Author-email: anthony.percy@systemscom.info
 License: BSD License
-Platform: any
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Environment :: Web Environment
 Classifier: Intended Audience :: Developers
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.4
-Classifier: Programming Language :: Python :: 3.5
-Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Framework :: Django
-License-File: LICENSE.txt
-Requires-Dist: Django>=1.8
-Requires-Dist: python-dateutil>=2.1
-Requires-Dist: six>=1.14.0
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.0
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: Django<5.2,>=3.2
+Requires-Dist: python-dateutil>=2.8.2
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
 Dynamic: description
+Dynamic: description-content-type
 Dynamic: home-page
 Dynamic: license
 Dynamic: license-file
-Dynamic: platform
 Dynamic: requires-dist
+Dynamic: requires-python
 Dynamic: summary
 
 django-eventtools is a lightweight library designed to handle repeating and

@@ -1,4 +1,4 @@
-LICENSE.txt
+LICENSE
 MANIFEST.in
 README.md
 setup.py
@@ -11,5 +11,10 @@ django_eventtools.egg-info/top_level.txt
 eventtools/__init__.py
 eventtools/_version.py
 eventtools/models.py
+eventtools/tz_context.py
 tests/test_settings.py
 tests/tests.py
+tzEvent/__init__.py
+tzEvent/conftest.py
+tzEvent/event.py
+tzEvent/test_event.py
