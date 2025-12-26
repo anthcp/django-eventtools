@@ -565,3 +565,84 @@ class EventToolsTestCase(TestCase):
         self.assertEqual((start_ny.year, start_ny.month, start_ny.day, start_ny.hour, start_ny.minute), (2025, 6, 1, 9, 0))
         self.assertEqual((end_ny.hour, end_ny.minute), (10, 0))
 
+    
+
+    @override_settings(USE_TZ=True)
+    def test_dst_spring_forward_london(self):
+        """
+        Europe/London DST starts 2025-03-30: 01:00 -> 02:00 (local).
+        Adding 2h across the gap should land at 03:30 local, not 02:30.
+        """
+        
+        London = Event.create_context("Europe/London")
+        start = London.datetime(2025, 3, 30, 0, 30)     # 00:30 GMT
+        later = start.add(hours=2)                      # +2h absolute
+        self.assertEqual(start.timezone_name, "Europe/London")
+        self.assertEqual(later.timezone_name, "Europe/London")
+        self.assertEqual((start.year, start.month, start.day, start.hour, start.minute), (2025, 3, 30, 0, 30))
+        # 00:30 UTC + 2h = 02:30 UTC, which is 03:30 BST after the jump
+        self.assertEqual((later.year, later.month, later.day, later.hour, later.minute), (2025, 3, 30, 3, 30))
+
+
+    @override_settings(USE_TZ=True)
+    def test_dst_fall_back_london_ambiguous_wall_time(self):
+        """
+        Europe/London DST ends 2025-10-26: 02:00 -> 01:00 (local).
+        The local wall time 01:30 occurs twice (BST then GMT). They must NOT be equal instants.
+        """
+        def _utc(y, m, d, hh=0, mm=0, ss=0):
+            return dt.datetime(y, m, d, hh, mm, ss, tzinfo=timezone.UTC)
+        
+        London = Event.create_context("Europe/London")
+        # Two different UTC instants that both display as 01:30 in London on the fall-back night.
+        # 00:30 UTC -> 01:30 BST (before fall-back)
+        a = London.from_any_datetime(_utc(2025, 10, 26, 0, 30))
+        # 01:30 UTC -> 01:30 GMT (after fall-back)
+        b = London.from_any_datetime(_utc(2025, 10, 26, 1, 30))
+        # Same wall clock in London...
+        self.assertEqual((a.year, a.month, a.day, a.hour, a.minute), (2025, 10, 26, 1, 30))
+        self.assertEqual((b.year, b.month, b.day, b.hour, b.minute), (2025, 10, 26, 1, 30))
+        # ...but different instants (timestamps differ)
+        self.assertNotEqual(a.timestamp(), b.timestamp())
+
+
+    @override_settings(USE_TZ=True)
+    def test_dst_spring_forward_new_york(self):
+        """
+        America/New_York DST starts 2025-03-09: 02:00 -> 03:00 (local).
+        Adding 2h across the gap should land at 04:30 local, not 03:30.
+        """
+        NewYork = Event.create_context("America/New_York")
+
+        start = NewYork.datetime(2025, 3, 9, 0, 30)
+        later = start.add(hours=2)
+
+        self.assertEqual(start.timezone_name, "America/New_York")
+        self.assertEqual(later.timezone_name, "America/New_York")
+        self.assertEqual((start.year, start.month, start.day, start.hour, start.minute), (2025, 3, 9, 0, 30))
+        # 2:00 -> 3:00 gap means +2h absolute advances wall clock by 3 hours across that window
+        self.assertEqual((later.year, later.month, later.day, later.hour, later.minute), (2025, 3, 9, 3, 30))
+
+
+    @override_settings(USE_TZ=True)
+    def test_dst_fall_back_new_york_ambiguous_wall_time(self):
+        """
+        America/New_York DST ends 2025-11-02: 02:00 -> 01:00 (local).
+        The local wall time 01:30 occurs twice (EDT then EST). They must NOT be equal instants.
+        """
+        def _utc(y, m, d, hh=0, mm=0, ss=0):
+            return dt.datetime(y, m, d, hh, mm, ss, tzinfo=timezone.UTC)
+
+        NewYork = Event.create_context("America/New_York")
+
+        # Two different UTC instants that both display as 01:30 in New York on the fall-back night.
+        # 05:30 UTC -> 01:30 EDT (before fall-back)
+        a = NewYork.from_any_datetime(_utc(2025, 11, 2, 5, 30))
+        # 06:30 UTC -> 01:30 EST (after fall-back)
+        b = NewYork.from_any_datetime(_utc(2025, 11, 2, 6, 30))
+
+        self.assertEqual((a.year, a.month, a.day, a.hour, a.minute), (2025, 11, 2, 1, 30))
+        self.assertEqual((b.year, b.month, b.day, b.hour, b.minute), (2025, 11, 2, 1, 30))
+
+        #self.assertNotEqual(a, b)
+        self.assertNotEqual(a.timestamp(), b.timestamp())

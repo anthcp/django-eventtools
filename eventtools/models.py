@@ -2,7 +2,7 @@
 
 from dateutil import rrule
 from datetime import date, datetime, timedelta
-
+#import datetime as dt
 from django.conf import settings
 from django.db import models
 from django.db.models import Q, Case, When, Value
@@ -501,7 +501,8 @@ class BaseOccurrence(BaseModel):
 
                 # make naive results aware
                 occ_start = default_aware(occ_start)
-                yield (wrap(occ_start), wrap(occ_start) + delta, self.occurrence_data)
+                occ_end = occ_start + delta  # <-- stdlib datetime + timedelta
+                yield (wrap(occ_start), wrap(occ_end), self.occurrence_data)
 
     def get_repeater(self):
         """Get rruleset instance representing this occurrence's repetitions.
