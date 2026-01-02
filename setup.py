@@ -30,7 +30,7 @@ setup(
     python_requires='>=3.9',
 
     install_requires=[
-        'Django>=3.2,<5.2',
+        'Django>=4.2,<6.0',
         'python-dateutil>=2.8.2',
     ],
 

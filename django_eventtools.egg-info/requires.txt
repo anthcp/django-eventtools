@@ -1,2 +1,2 @@
-Django<5.2,>=3.2
+Django<6.0,>=4.2
 python-dateutil>=2.8.2

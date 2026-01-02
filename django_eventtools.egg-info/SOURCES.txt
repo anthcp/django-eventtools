@@ -12,9 +12,9 @@ eventtools/__init__.py
 eventtools/_version.py
 eventtools/models.py
 eventtools/tz_context.py
+eventtools/tzEvent/__init__.py
+eventtools/tzEvent/conftest.py
+eventtools/tzEvent/event.py
+eventtools/tzEvent/test_event.py
 tests/test_settings.py
 tests/tests.py
-tzEvent/__init__.py
-tzEvent/conftest.py
-tzEvent/event.py
-tzEvent/test_event.py
